@@ -18,9 +18,9 @@ public strictfp class RobotPlayer {
     };
     static RobotType[] spawnedByMiner = {RobotType.REFINERY, RobotType.VAPORATOR, RobotType.DESIGN_SCHOOL,
             RobotType.FULFILLMENT_CENTER, RobotType.NET_GUN};
+    static final int TEAM_SECRET = 789;
 
     static int turnCount;
-    static MapLocation hqLoc;
     static int numMiners = 0;
     static int numDesignSchools = 0;
     static int robotMode = 0;
@@ -49,7 +49,6 @@ public strictfp class RobotPlayer {
                 // Here, we've separated the controls into a different method for each RobotType.
                 // You can add the missing ones or rewrite this into your own control structure.
                 System.out.println("I'm a " + rc.getType() + "! Location " + rc.getLocation());
-                findHQ();
                 switch (rc.getType()) {
                     case HQ:                 runHQ();                break;
                     case MINER:              runMiner();             break;
@@ -68,22 +67,6 @@ public strictfp class RobotPlayer {
             } catch (Exception e) {
                 System.out.println(rc.getType() + " Exception");
                 e.printStackTrace();
-            }
-        }
-    }
-
-    static void findHQ() throws GameActionException {
-        if (hqLoc == null) {
-            // search surroundings for HQ
-            RobotInfo[] robots = rc.senseNearbyRobots();
-            for (RobotInfo robot : robots) {
-                if (robot.type == RobotType.HQ && robot.team == rc.getTeam()) {
-                    hqLoc = robot.location;
-                }
-            }
-            if(hqLoc == null) {
-                // if still null, search the blockchain
-                getHqLocFromBlockchain();
             }
         }
     }
@@ -113,11 +96,22 @@ public strictfp class RobotPlayer {
                 // Do something
             }
         }
+
+        // search surroundings for HQ upon spawn
+        if (hqLoc == null) {
+            RobotInfo[] robots = rc.senseNearbyRobots();
+            for (RobotInfo robot : robots) {
+                if (robot.type == RobotType.HQ && robot.team == rc.getTeam()) {
+                    hqLoc = robot.location;
+                }
+            }
+        }
+
         // Check if each soup location is empty; if it is, remove it from soupLocs and broadcast
         for (MapLocation soupLoc : soupLocs) {
             if (rc.canSenseLocation(soupLoc) && rc.senseSoup(soupLoc) == 0) {
                 soupLocs.remove(0);
-                broadcastMessage(3, soupLoc.x, soupLoc.y, 9, 0, 0, 0);
+                broadcastMessage(3, soupLoc.x, soupLoc.y, TEAM_SECRET, 9, 0, 0, 0);
             }
         }
         // Wander and find soup mode (0)
@@ -128,7 +122,7 @@ public strictfp class RobotPlayer {
         }
         // Mine soup mode (2)
         else if (robotMode == 1) {
-            a
+            
         }
         // Find refinery mode (3)
         
@@ -306,15 +300,6 @@ public strictfp class RobotPlayer {
         return false;
     }
 
-    static boolean tryDig() throws GameActionException {
-        Direction dir = randomDirection();
-        if(rc.canDigDirt(dir)){
-            rc.digDirt(dir);
-            return true;
-        }
-        return false;
-    }
-
     static boolean tryMove() throws GameActionException {
         for (Direction dir : directions)
             if (tryMove(dir))
@@ -386,7 +371,8 @@ public strictfp class RobotPlayer {
         if (rc.isReady() && rc.canMineSoup(dir)) {
             rc.mineSoup(dir);
             return true;
-        } else return false;
+        }
+        return false;
     }
 
     /**
@@ -400,24 +386,26 @@ public strictfp class RobotPlayer {
         if (rc.isReady() && rc.canDepositSoup(dir)) {
             rc.depositSoup(dir, rc.getSoupCarrying());
             return true;
-        } else return false;
-    }
-
-
-    static void tryBlockchain() throws GameActionException {
-        if (turnCount < 3) {
-            int[] message = new int[7];
-            for (int i = 0; i < 7; i++) {
-                message[i] = 123;
-            }
-            if (rc.canSubmitTransaction(message, 10))
-                rc.submitTransaction(message, 10);
         }
-        // System.out.println(rc.getRoundMessages(turnCount-1));
+        return false;
+    }
+    
+    /**
+     * Attempts to dig dirt in a given direction.
+     *
+     * @param dir The intended direction of refining
+     * @return true if a move was performed
+     * @throws GameActionException
+     */
+    static boolean tryDig(Direction dir) throws GameActionException {
+        if(rc.isReady() && rc.canDigDirt(dir)){
+            rc.digDirt(dir);
+            return true;
+        }
+        return false;
     }
 
     /* COMMUNICATIONS STUFF */
-    static final int TEAM_SECRET = 789;
     static final String[] messageType = {
         "HQ location",                  // 0
         "Refinery created",             // 1
@@ -433,7 +421,7 @@ public strictfp class RobotPlayer {
 
     // Broadcasts any message, see below for specific format
     // Returns true iff message was succesfully submitted
-    public static boolean broadcastMessage(int soupCost, int m0, int m1, int m2, int m3, int m4, int m5, int m6) {
+    public static boolean broadcastMessage(int soupCost, int m0, int m1, int m2, int m3, int m4, int m5, int m6) throws GameActionException {
         int[] message = new int[7];
         message[0] = m0; // xLoc
         message[1] = m1; // yLoc
@@ -442,7 +430,7 @@ public strictfp class RobotPlayer {
         message[4] = m4; // val1
         message[5] = m5; // val2
         message[6] = m6; // val3
-        if (rc.canSubmitTransaction(message, soupCost) {
+        if (rc.canSubmitTransaction(message, soupCost)) {
             rc.submitTransaction(message, soupCost);
             return true;
         }
@@ -465,7 +453,7 @@ public strictfp class RobotPlayer {
     public static void updateSoupLocations() throws GameActionException {
         for(Transaction tx : rc.getBlock(rc.getRoundNum() - 1)) {
             int[] mess = tx.getMessage();
-            if(mess[0] == teamSecret && mess[1] == 2){
+            if(mess[2] == TEAM_SECRET && mess[1] == 2){
                 System.out.println("heard about a tasty new soup location");
                 soupLocs.add(new MapLocation(mess[2], mess[3]));
             }
