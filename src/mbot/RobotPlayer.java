@@ -49,9 +49,15 @@ public strictfp class RobotPlayer {
                     	break;
                     case REFINERY:           Refinery.run();          break;
 //                    case VAPORATOR:          runVaporator();         break;
-//                    case DESIGN_SCHOOL:      runDesignSchool();      break;
+                    case DESIGN_SCHOOL:
+                    	findHQ();
+                    	DesignSchool.run();
+                    	break;
 //                    case FULFILLMENT_CENTER: runFulfillmentCenter(); break;
-//                    case LANDSCAPER:         runLandscaper();        break;
+                    case LANDSCAPER:
+                    	findHQ();
+                    	Landscaper.run();
+                    	break;
 //                    case DELIVERY_DRONE:     runDeliveryDrone();     break;
 //                    case NET_GUN:            runNetGun();            break;
                 }
@@ -75,8 +81,9 @@ public strictfp class RobotPlayer {
                     hqLoc = robot.location;
                 }
             }
-            // TODO later: use blockchain to communicate
-            // idea: HQ broadcasts code and location on turn 1, all units check for the special code
+            if(hqLoc == null) {
+                getHqLocFromBlockchain();
+            }
         }
     }
 	
@@ -220,6 +227,19 @@ public strictfp class RobotPlayer {
         for(RobotInfo r : robots) {
             if(r.getType() == target) {
                 return true;
+            }
+        }
+        return false;
+    }
+    
+    public static boolean getHqLocFromBlockchain() throws GameActionException {
+        for (int i = 1; i < rc.getRoundNum(); i++) {
+            for(Transaction tx : rc.getBlock(i)) {
+                int[] mess = tx.getMessage();
+                if(mess[2] == TEAM_SECRET && mess[3] == 4){
+                    hqLoc = new MapLocation(mess[0], mess[1]);
+                    return true;
+                }
             }
         }
         return false;

@@ -33,7 +33,7 @@ public class HQ extends RobotPlayer {
             	int enemyBid = tx.getCost();
             	
             	
-            	if (teamSoup > 5000 && enemyBid > defaultBid) {
+            	if (teamSoup > 2000 && enemyBid > defaultBid) {
             		defaultBid = enemyBid + 1;
             	} else if (teamSoup < 2000) {
             		defaultBid = 1;
@@ -46,7 +46,7 @@ public class HQ extends RobotPlayer {
             
         }
     	
-        if(numMiners < 4 && turnCount < 100) {
+        if(numMiners < 5) {
             for (Direction dir : directions)
                 if (tryBuild(RobotType.MINER, dir)) {
                 	// add one to miner count
@@ -62,6 +62,14 @@ public class HQ extends RobotPlayer {
         
         // Potential Rush Defense?
         
+        // While HQ loc not in blockchain, send location
+        if (!getHqLocFromBlockchain())
+        	sendLocation();
+    }
+    
+    static void sendLocation() throws GameActionException {
+    	MapLocation loc = rc.getLocation();
+    	broadcastMessage(defaultBid, loc.x, loc.y, TEAM_SECRET, 4, 0, 0, 0);
     }
     
 }

@@ -145,12 +145,12 @@ public strictfp class RobotPlayer {
 					}
 				}
 				
-				if (message[2]==teamCode && message[3] == removeSoup) {
-					if(!soupLocList.isEmpty()) {
-						soupLocList.remove(new MapLocation(message[0],message[1]));
-					}
-				}
-				
+//				if (message[2]==teamCode && message[3] == removeSoup) {
+//					if(!soupLocList.isEmpty()) {
+//						soupLocList.remove(new MapLocation(message[0],message[1]));
+//					}
+//				}
+//				
 				
 			}
 		}
@@ -189,7 +189,7 @@ public strictfp class RobotPlayer {
 			findHQ();
 		}
 		
-		checkIfSoupGone();
+//		checkIfSoupGone();
 
 		if(soupLoc == null) {
 			if(!askSoupFromHQ()) {
