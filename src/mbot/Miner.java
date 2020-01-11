@@ -89,13 +89,12 @@ public class Miner extends RobotPlayer {
 	}
 	
 	static void detectNearbySoup() throws GameActionException {
-		int detectRad = rc.getCurrentSensorRadiusSquared();
+		int detectRad = (int) Math.sqrt(rc.getCurrentSensorRadiusSquared());
 		MapLocation currLoc = rc.getLocation();
 		int startX = currLoc.x - detectRad;
 		int startY = currLoc.y - detectRad;
 		int endX = currLoc.x + detectRad;
 		int endY = currLoc.y + detectRad;
-		
 		
 		for (int i = startX; i < endX; i++) {
 			for (int j = startY; j < endY; j++) {
