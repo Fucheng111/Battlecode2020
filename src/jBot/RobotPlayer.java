@@ -39,7 +39,7 @@ public strictfp class RobotPlayer {
     static MapLocation hqLoc;
     static MapLocation robotDest;
     static MapLocation lastBugPathLoc;
-    static PrioirtyQueue<int[]> messageQ = new PriorityQueue<int[]>();
+    static PriorityQueue<int[]> messageQ = new PriorityQueue<int[]>();
     static ArrayList<MapLocation> soupLocs = new ArrayList<MapLocation>();
     static ArrayList<MapLocation> refineryLocs = new ArrayList<MapLocation>();
     static ArrayList<MapLocation> vaporatorLocs = new ArrayList<MapLocation>();
@@ -93,23 +93,21 @@ public strictfp class RobotPlayer {
     static void runHQ() throws GameActionException {
 
         // Process transactions past the first round
-        if (rc.getRoundNum() != 1) {
+        if (turnCount != 1) {
             for(Transaction tx : rc.getBlock(rc.getRoundNum() - 1)) {
                 int[] mess = tx.getMessage();
                 if(mess[2]/100 == TEAM_SECRET) {
                     // Refinery created
                     if (mess[2]%100 == 1)
-                        refineryLocs.add(new Maplocation(-mess[0], -mess[1]));
+                        refineryLocs.add(new MapLocation(-mess[0], -mess[1]));
                     // etc. 
                 }
             }
         }
         
-        // Send location to landscapers???
-        // We can do this at turn 15 or something random like that bc its not like we will be creating landscapers earlier than that
-        if(turnCount == 1) {
-            sendHqLoc(rc.getLocation());
-        }
+        // Broadcast location at turn 2 with 1 soup
+        if(rc.getRoundNum() == 3)
+            broadcastMessage(1, rc.getLocation().x, rc.getLocation().y, 0, 0, 0, 0, 0);
 
         // If there are a certain number of miners/refineries, build a miner
         if(numMiners <= 4 || (numMiners <= 10 && refineryLocs.size() >= 1)) {
@@ -133,7 +131,7 @@ public strictfp class RobotPlayer {
             RobotInfo[] robots = rc.senseNearbyRobots();
             for (RobotInfo robot : robots) {
                 if (robot.getType() == RobotType.HQ)
-                    hqLoc = new MapLocation(robot.getLocation());
+                    hqLoc = robot.getLocation();
             }
         }
 
@@ -148,20 +146,20 @@ public strictfp class RobotPlayer {
             if(mess[2]/100 == TEAM_SECRET) {
                 // Add refinery to refinery ArrayList
                 if (mess[2]%100 == 1)
-                    refineryLocs.add(new MapLocation(-message[0], -message[1]));
+                    refineryLocs.add(new MapLocation(-mess[0], -mess[1]));
                 // Add soup to soup ArrayList
                 else if (mess[2]%100 == 8)
-                    soupLocs.add(new Maplocation(-message[0], -message[1]));
+                    soupLocs.add(new MapLocation(-mess[0], -mess[1]));
                 // Remove soup from soup ArrayList
                 else if (mess[2]%100 == 9)
-                    soupLocs.remove(new Maplocation(-message[0], -message[1]));
+                    soupLocs.remove(new MapLocation(-mess[0], -mess[1]));
                 // Move towards location if HQ requests
                 else if (mess[2]%100 == 11 && mess[3] == rc.getID()) {
-                    robotDest = new MapLocation(-message[0], -message[1]);
+                    robotDest = new MapLocation(-mess[0], -mess[1]);
                     robotMode = 0;
-                    // If HQ requests a building (message[3] is not 0), then record the building type
-                    if (message[4] != 0)
-                        robotNum = message[4];
+                    // If HQ requests a building (message[4] is not 0), then record the building type
+                    if (mess[4] != 0)
+                        robotNum = mess[4];
                     waitMode = false;
                 }
             }
@@ -192,18 +190,18 @@ public strictfp class RobotPlayer {
                 else if (refineryLocs.contains(robotDest))
                     robotMode = 2;
                 // Change to build if the destination is empty 
-                else if (canBuildRobot(destDir) && robotType != null)
+                else if (robotNum != 0 && rc.canBuildRobot(spawnedByMiner[robotNum-1], destDir))
                     robotMode = 3;
                 // Otherwise, wait a turn
                 else
-                    minerCantBuild();
+                    minerCantBuild(currLoc);
             }
             // Search surrounding square (11x11 if no pollution) for soup
             int rad = (int) Math.sqrt(rc.getCurrentSensorRadiusSquared());
             for (int i=-rad; i<=rad; i++) {
                 for (int j=-rad; j<=rad; j++) {
-                    MapLocation loc = new MapLocation(curLoc.add(i,j));
-                    if (rc.onTheMap(loc) && senseSoup(loc) != 0 && !soupLocs.contains(loc))
+                    MapLocation loc = currLoc.translate(i,j);
+                    if (rc.onTheMap(loc) && rc.senseSoup(loc) != 0 && !soupLocs.contains(loc))
                         tryBroadcastMessage(3, loc.x, loc.y, 8, 0, 0, 0, 0);
                 }
             }
@@ -216,8 +214,8 @@ public strictfp class RobotPlayer {
                 robotMode = 0;
                 robotDest = hqLoc;
                 int lowestDist = currLoc.distanceSquaredTo(robotDest);
-                for (Maplocation loc : refineryLocs) {
-                    if currLoc.distanceSquaredTo(loc) < lowestDist {
+                for (MapLocation loc : refineryLocs) {
+                    if (currLoc.distanceSquaredTo(loc) < lowestDist) {
                         robotDest = loc;
                         lowestDist = currLoc.distanceSquaredTo(loc);
                     }
@@ -229,7 +227,7 @@ public strictfp class RobotPlayer {
         else if (robotMode == 2) {
             if (tryRefine(destDir)) {
                 tryBroadcastMessage(3, currLoc.x, currLoc.y, 10, rc.getID(), 0, 0, 0);
-                robotMode == -1;
+                robotMode = -1;
             }
         }
         
@@ -240,7 +238,7 @@ public strictfp class RobotPlayer {
                 robotMode = -1;
             }
             else
-                minerCantBuild();
+                minerCantBuild(currLoc);
         }
         // NOTE: -1 is the robotMode for "wait for a command from HQ"
     }
@@ -310,7 +308,8 @@ public strictfp class RobotPlayer {
         for (Transaction tx : rc.getBlock(rc.getRoundNum() - 1)) {
             int[] mess = tx.getMessage();
             if (mess[2]/100 == TEAM_SECRET) {
-                if (mess[2]%100 == 1])
+                if (mess[2]%100 == 1)
+                    System.out.println();
                     // Do something
                 // etc.
             }
@@ -354,7 +353,8 @@ public strictfp class RobotPlayer {
         for (Transaction tx : rc.getBlock(rc.getRoundNum() - 1)) {
             int[] mess = tx.getMessage();
             if (mess[2]/100 == TEAM_SECRET) {
-                if (mess[2]%100 == 1])
+                if (mess[2]%100 == 1)
+                    System.out.println();
                     // Do something
                 // etc.
             }
@@ -417,7 +417,7 @@ public strictfp class RobotPlayer {
      * @throws GameActionException
      */
     static boolean goTo(MapLocation destination) throws GameActionException {
-        dir = rc.getLocation().directionTo(destination);
+        Direction dir = rc.getLocation().directionTo(destination);
         Direction[] toTry = {dir, dir.rotateLeft(), dir.rotateRight(), dir.rotateLeft().rotateLeft(), dir.rotateRight().rotateRight()};
         for (Direction d : toTry) {
             if(tryMove(d))
@@ -519,7 +519,7 @@ public strictfp class RobotPlayer {
      * @throws GameActionException
      */
     static Direction optimalDirection(MapLocation loc) throws GameActionException{
-
+        return randomDirection();
     }
 
     /**
@@ -529,7 +529,7 @@ public strictfp class RobotPlayer {
      * 
      * @throws GameActionException
      */
-    static void minerCantBuild() throws GameActionException {
+    static void minerCantBuild(MapLocation currLoc) throws GameActionException {
         if ((rc.senseFlooding(robotDest) || rc.senseRobotAtLocation(robotDest).getType().isBuilding()) && !waitMode) {
             broadcastMessage(3, currLoc.x, currLoc.y, 10, rc.getID(), 0, 0, 0);
             waitMode = true;
@@ -598,7 +598,7 @@ public strictfp class RobotPlayer {
             int[] saveMess = new int[8];
             saveMess[0] = soupCost;
             saveMess[1] = m0;
-            saveMess[2] = m1
+            saveMess[2] = m1;
             saveMess[3] = m2;
             saveMess[4] = m3;
             saveMess[5] = m4;
