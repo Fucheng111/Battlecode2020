@@ -1,5 +1,4 @@
 package mbot;
-import java.util.HashMap;
 
 import battlecode.common.*;
 
@@ -24,13 +23,14 @@ public strictfp class RobotPlayer {
     
     static int numMiners = 0;
     static int numLandscapers = 0;
-    static int numDrones = 0;
-    static int numRefineries = 0;
-    static int numVaporators = 0;
     static int numSchools = 0;
     static int numCenters = 0;
-    static int numGuns = 0;
-	
+    static int numDesignSchools = 0;
+    
+    static int defaultBid = 1;
+    
+    static final int TEAM_SECRET = 420;
+    
 	public static void run(RobotController rc) throws GameActionException {
 		RobotPlayer.rc = rc;
 
@@ -40,11 +40,14 @@ public strictfp class RobotPlayer {
         while (true) {
             turnCount += 1;
             try {
-                System.out.println("I'm a " + rc.getType() + "! Location " + rc.getLocation());
+//              System.out.println("I'm a " + rc.getType() + "! Location " + rc.getLocation());
                 switch (rc.getType()) {
                     case HQ:                 HQ.run();                break;
-                    case MINER:              Miner.run();             break;
-//                    case REFINERY:           runRefinery();          break;
+                    case MINER:             
+                    	findHQ();
+                    	Miner.run();             
+                    	break;
+                    case REFINERY:           Refinery.run();          break;
 //                    case VAPORATOR:          runVaporator();         break;
 //                    case DESIGN_SCHOOL:      runDesignSchool();      break;
 //                    case FULFILLMENT_CENTER: runFulfillmentCenter(); break;
@@ -62,6 +65,20 @@ public strictfp class RobotPlayer {
             }
         }
 	}
+	
+    static void findHQ() throws GameActionException {
+        if (hqLoc == null) {
+            // search surroundings for HQ
+            RobotInfo[] robots = rc.senseNearbyRobots();
+            for (RobotInfo robot : robots) {
+                if (robot.type == RobotType.HQ && robot.team == rc.getTeam()) {
+                    hqLoc = robot.location;
+                }
+            }
+            // TODO later: use blockchain to communicate
+            // idea: HQ broadcasts code and location on turn 1, all units check for the special code
+        }
+    }
 	
     /**
      * Returns a random Direction.
@@ -97,7 +114,11 @@ public strictfp class RobotPlayer {
      */
     static boolean tryMove(Direction dir) throws GameActionException {
         // System.out.println("I am trying to move " + dir + "; " + rc.isReady() + " " + rc.getCooldownTurns() + " " + rc.canMove(dir));
-        if (rc.isReady() && rc.canMove(dir)) {
+    	
+    	// no drowning on my watch
+    	boolean flooded = rc.senseFlooding(rc.getLocation().add(dir));
+    	
+        if (rc.isReady() && rc.canMove(dir) && !flooded) {
             rc.move(dir);
             return true;
         } else return false;
@@ -154,16 +175,29 @@ public strictfp class RobotPlayer {
         }
         return false;
     }
-
-    static void tryBlockchain() throws GameActionException {
-        if (turnCount < 3) {
-            int[] message = new int[7];
-            for (int i = 0; i < 7; i++) {
-                message[i] = 123;
-            }
-            if (rc.canSubmitTransaction(message, 10))
-                rc.submitTransaction(message, 10);
+    
+    static boolean tryDig(Direction dir) throws GameActionException {
+    	if(rc.canDigDirt(dir)){
+            rc.digDirt(dir);
+            return true;
         }
+        return false;
+    }
+
+    public static boolean broadcastMessage(int soupCost, int xLoc, int yLoc, int ts, int messageType, int m4, int m5, int m6) throws GameActionException {
+        int[] message = new int[7];
+        message[0] = xLoc; // xLoc
+        message[1] = yLoc; // yLoc
+        message[2] = ts; // teamSecret
+        message[3] = messageType; // messageType
+        message[4] = m4;
+        message[5] = m5; // val2
+        message[6] = m6; // val3
+        if (rc.canSubmitTransaction(message, soupCost)) {
+            rc.submitTransaction(message, soupCost);
+            return true;
+        }
+        return false;
     }
     
     // tries to move in the general direction of dir
