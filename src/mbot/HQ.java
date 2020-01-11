@@ -33,7 +33,7 @@ public class HQ extends RobotPlayer {
             	int enemyBid = tx.getCost();
             	
             	
-            	if (teamSoup > 5000 && enemyBid > defaultBid) {
+            	if (teamSoup > 2000 && enemyBid > defaultBid) {
             		defaultBid = enemyBid + 1;
             	} else if (teamSoup < 2000) {
             		defaultBid = 1;
@@ -62,6 +62,12 @@ public class HQ extends RobotPlayer {
         
         // Potential Rush Defense?
         
+       	sendLocation();
+    }
+    
+    static void sendLocation() throws GameActionException {
+    	MapLocation loc = rc.getLocation();
+    	broadcastMessage(defaultBid, loc.x, loc.y, TEAM_SECRET, 4, 0, 0, 0);
     }
     
 }

@@ -55,12 +55,16 @@ public class Miner extends RobotPlayer {
 		}
 		
 		// Try building design school
-        if (numDesignSchools < 3){
-            if(tryBuild(RobotType.DESIGN_SCHOOL, randomDirection())) {
-                System.out.println("created a design school");
-                numDesignSchools++;
-            }
-        }
+//        if (numDesignSchools < 3) {
+//        	MapLocation loc = rc.getLocation();
+//        	Direction dir = randomDirection();
+//            if(tryBuild(RobotType.DESIGN_SCHOOL,dir)) {
+//                System.out.println("created a design school");
+//                MapLocation refineryLoc = loc.add(dir);
+//                numDesignSchools++;
+//                broadcastMessage(defaultBid, refineryLoc.x, refineryLoc.y, TEAM_SECRET, 3, 0, 0, 0);
+//            }
+//        }
 		
 		// Head towards refinery (or HQ) if full
 		// Otherwise path randomly
@@ -68,7 +72,7 @@ public class Miner extends RobotPlayer {
 			int distToNearestRefinery = rc.getLocation().distanceSquaredTo(nearestRefinery);
 
 			// If too far from nearestRefinery, build a new one
-			if (distToNearestRefinery > rc.getMapWidth() / 3) {
+			if (distToNearestRefinery > rc.getMapWidth() / 3 && rc.getTeamSoup() > 200) {
 				for (Direction dir : directions)
 					
 					// update nearestRefinery and broadcast for HQ to store
