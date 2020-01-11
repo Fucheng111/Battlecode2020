@@ -30,6 +30,8 @@ public class Miner extends RobotPlayer {
             		soupLocations.add(new MapLocation(mess[0], mess[1]));
             	} else if (mess[3] == 2) {
             		refineryLocations.add(new MapLocation(mess[0], mess[1]));
+            	} else if (mess[3] == 3) {
+            		numDesignSchools++;
             	}
             }
 		}
@@ -54,17 +56,17 @@ public class Miner extends RobotPlayer {
 		    }
 		}
 		
-		// Try building design school
-//        if (numDesignSchools < 3) {
-//        	MapLocation loc = rc.getLocation();
-//        	Direction dir = randomDirection();
-//            if(tryBuild(RobotType.DESIGN_SCHOOL,dir)) {
-//                System.out.println("created a design school");
-//                MapLocation refineryLoc = loc.add(dir);
-//                numDesignSchools++;
-//                broadcastMessage(defaultBid, refineryLoc.x, refineryLoc.y, TEAM_SECRET, 3, 0, 0, 0);
-//            }
-//        }
+//		 Try building design school
+        if (numDesignSchools < 1) {
+        	MapLocation loc = rc.getLocation();
+        	Direction dir = randomDirection();
+            if(tryBuild(RobotType.DESIGN_SCHOOL,dir)) {
+                System.out.println("created a design school");
+                MapLocation schoolLoc = loc.add(dir);
+                numDesignSchools++;
+                broadcastMessage(defaultBid, schoolLoc.x, schoolLoc.y, TEAM_SECRET, 3, 0, 0, 0);
+            }
+        }
 		
 		// Head towards refinery (or HQ) if full
 		// Otherwise path randomly

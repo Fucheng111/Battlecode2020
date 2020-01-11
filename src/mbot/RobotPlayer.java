@@ -54,7 +54,10 @@ public strictfp class RobotPlayer {
                     	DesignSchool.run();
                     	break;
 //                    case FULFILLMENT_CENTER: runFulfillmentCenter(); break;
-                    case LANDSCAPER:         Landscaper.run();        break;
+                    case LANDSCAPER:
+                    	findHQ();
+                    	Landscaper.run();
+                    	break;
 //                    case DELIVERY_DRONE:     runDeliveryDrone();     break;
 //                    case NET_GUN:            runNetGun();            break;
                 }
@@ -229,16 +232,17 @@ public strictfp class RobotPlayer {
         return false;
     }
     
-    public static void getHqLocFromBlockchain() throws GameActionException {
+    public static boolean getHqLocFromBlockchain() throws GameActionException {
         for (int i = 1; i < rc.getRoundNum(); i++) {
             for(Transaction tx : rc.getBlock(i)) {
                 int[] mess = tx.getMessage();
                 if(mess[2] == TEAM_SECRET && mess[3] == 4){
                     hqLoc = new MapLocation(mess[0], mess[1]);
-                    return;
+                    return true;
                 }
             }
         }
+        return false;
     }
     
     static void printAction(String action) {
