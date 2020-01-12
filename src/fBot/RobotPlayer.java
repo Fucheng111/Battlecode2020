@@ -42,6 +42,7 @@ public strictfp class RobotPlayer {
 	 * List of information know by the miners
 	 */
 	static MapLocation soupLoc;
+	static MapLocation refineryLoc;
 	static int wantSoup  = 20;
 	static int foundSoup = 21;
 	static int removeSoup = 22;
@@ -94,19 +95,28 @@ public strictfp class RobotPlayer {
 	}
 
 	static void findHQ() throws GameActionException {
-
-		if(rc.getRoundNum()>2) {
-			Transaction[] first_roundTransaction = rc.getBlock(2);
-
-			for(Transaction i: first_roundTransaction) {
-				int[] message = i.getMessage();
-				if(message[2] == teamCode) {
-					hqLoc = new MapLocation(message[0],message[1]);
-				}
-			}
-		}
-
-		Clock.yield();
+		
+		 if (hqLoc == null) {
+	            // search surroundings for HQ
+	            RobotInfo[] robots = rc.senseNearbyRobots();
+	            for (RobotInfo robot : robots) {
+	                if (robot.type == RobotType.HQ && robot.team == rc.getTeam()) {
+	                    hqLoc = robot.location;
+	                }
+	            }
+	            if(hqLoc == null) {
+	                // if still null, search the blockchain
+	            	for (int i = 1; i < rc.getRoundNum(); i++){
+	                    for(Transaction tx : rc.getBlock(i)) {
+	                        int[] mess = tx.getMessage();
+	                        if(mess[2] == teamCode){
+	                            System.out.println("found the HQ!");
+	                            hqLoc = new MapLocation(mess[0], mess[1]);
+	                        }
+	                    }
+	                }
+	            }
+	        }
 
 	}
 
@@ -139,18 +149,18 @@ public strictfp class RobotPlayer {
 
 				if (message[2]==teamCode && message[3] == wantSoup) {
 					if(!soupLocList.isEmpty()) {
-						broadcastMessage(0, soupLocList.get(0).x, soupLocList.get(0).y, teamCode, sendMinerToMine, 1, 1, 1);
-
+						broadcastMessage(1, soupLocList.get(0).x, soupLocList.get(0).y, teamCode, sendMinerToMine, 1, 1, 1);
+						
 						
 					}
 				}
 				
-//				if (message[2]==teamCode && message[3] == removeSoup) {
-//					if(!soupLocList.isEmpty()) {
-//						soupLocList.remove(new MapLocation(message[0],message[1]));
-//					}
-//				}
-//				
+				if (message[2]==teamCode && message[3] == removeSoup) {
+					if(!soupLocList.isEmpty()) {
+						soupLocList.remove(new MapLocation(message[0],message[1]));
+					}
+				}
+				
 				
 			}
 		}
@@ -182,14 +192,13 @@ public strictfp class RobotPlayer {
 		return false;
 
 	}
+	
 
+	//Miner code
 	static void runMiner() throws GameActionException {
-
-		if(hqLoc == null) {
-			findHQ();
-		}
+		findHQ();
 		
-//		checkIfSoupGone();
+		checkIfSoupGone();
 
 		if(soupLoc == null) {
 			if(!askSoupFromHQ()) {
@@ -202,7 +211,7 @@ public strictfp class RobotPlayer {
 							System.out.println("I refined soup! " + rc.getTeamSoup());
 					for (Direction dire : directions)
 						if (tryMine(dire)) {
-							broadcastMessage(0,rc.getLocation().add(dire).x,rc.getLocation().add(dire).y,teamCode,foundSoup,1,1,1);
+							broadcastMessage(1,rc.getLocation().add(dire).x,rc.getLocation().add(dire).y,teamCode,foundSoup,1,1,1);
 							soupLoc = rc.getLocation().add(dire);
 							return;
 						}
@@ -214,10 +223,17 @@ public strictfp class RobotPlayer {
 					//						 }
 					//					 }
 
-
-					if(goTo(dir)) {
-						System.out.print("I'm Moving in "+dir.name() );
+					
+					if(floodFront(dir)) {
+						dir = dir.rotateLeft();
+					
 					}
+					
+					if(goTo(dir)) {
+						System.out.print("I'm Moving in "+dir.name());
+					}
+					
+					
 
 					Clock.yield();
 
@@ -225,6 +241,22 @@ public strictfp class RobotPlayer {
 			}
 		}
 
+		
+		if(soupLoc.distanceSquaredTo(hqLoc) > 35) {
+			RobotInfo[] robots = rc.senseNearbyRobots();
+			for (RobotInfo robot: robots) {
+				if(robot.type == RobotType.REFINERY) {
+					refineryLoc = robot.getLocation();
+				}
+			}
+			
+			//build refinery
+			if(refineryLoc == null) {
+				for (Direction dir : directions)
+					if (tryBuild(RobotType.REFINERY,dir))             
+						System.out.println("I build a refinery!");
+			}
+		}
 
 		for (Direction dir : directions)
 			if (tryRefine(dir))             
@@ -239,9 +271,13 @@ public strictfp class RobotPlayer {
 				System.out.println("created a design school");
 		}
 		
-
+		
 		if (rc.getSoupCarrying() == RobotType.MINER.soupLimit) {
 			// time to go back to the HQ
+			if(refineryLoc != null) {
+				goTo(refineryLoc);
+			}
+			
 			if(goTo(hqLoc))
 				System.out.println("moved towards HQ");
 		}else if(soupLoc != null) {
@@ -477,11 +513,26 @@ public strictfp class RobotPlayer {
 	}
 
 	static void checkIfSoupGone() throws GameActionException {
-        if(rc.senseSoup(soupLoc) ==0) {
-        	soupLoc = null;
-        	broadcastMessage(1, soupLoc.x, soupLoc.y , teamCode, removeSoup, 1, 1, 1);
-        }
+		if(soupLoc != null) {
+	        if(rc.canSenseLocation(soupLoc)&&rc.senseSoup(soupLoc) ==0) {
+	        	soupLoc = null;
+	        	broadcastMessage(1, soupLoc.x, soupLoc.y , teamCode, removeSoup, 1, 1, 1);
+	        }
+		}
     }
+	
+	static boolean floodFront(Direction dir) throws GameActionException{
+		Direction[] front = {dir, dir.rotateLeft(), dir.rotateRight(), dir.rotateLeft().rotateLeft(), dir.rotateRight().rotateRight()};
+
+		for(Direction dire: front) {
+			if(rc.senseFlooding(rc.getLocation().add(dire))) {
+				return true;
+			}
+		}
+		
+		return false;
+	}
+	
 
 	static void tryBlockchain() throws GameActionException {
 		//        if (turnCount > 0) {
