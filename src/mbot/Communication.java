@@ -17,7 +17,8 @@ public class Communication extends RobotPlayer {
 	public static enum MessageType {
 		HQ_FOUND(0, HQFoundMessage.class), REFINERY_CREATED(1, RefineryCreatedMessage.class), VAPORATOR_CREATED(2, VaporatorCreatedMessage.class), 
 		DESIGN_SCHOOL_CREATED(3, DesignSchoolCreatedMessage.class), FULFILLMENT_CENTER_CREATED(4, FulfillmentCenterCreatedMessage.class),
-		NET_GUN_CREATED(5, NetGunCreatedMessage.class), SOUP_LOCATION(8, SoupLocationMessage.class), SOUP_GONE(9, SoupGoneMessage.class);
+		NET_GUN_CREATED(5, NetGunCreatedMessage.class), SOUP_LOCATION(8, SoupLocationMessage.class), SOUP_GONE(9, SoupGoneMessage.class),
+		INITIAL_DIRECTION(10, InitialDirectionMessage.class);
 		
 		int value;
 		Class c;
@@ -34,7 +35,7 @@ public class Communication extends RobotPlayer {
 	 * @author mark jung
 	 *
 	 */
-	public static class Message {
+	public static class Message implements Comparable<Message> {
 		public int code;
 		public int bid;
 		public int[] message;
@@ -88,6 +89,12 @@ public class Communication extends RobotPlayer {
 		
 		public MessageType getMessageType() {
 			return messageType;
+		}
+
+		@Override
+		public int compareTo(Message o) {
+			// Higher cost means higher priority (aka comes first in ordering)
+			return o.cost - this.cost;
 		}
 	}
 	
@@ -244,5 +251,18 @@ public class Communication extends RobotPlayer {
 		}
 	}
 	
+	public static class InitialDirectionMessage extends Message {
+		public InitialDirectionMessage() {
+			this(defaultBid);
+		}
+		
+		public InitialDirectionMessage(int bid) {
+			super(bid);
+			
+			message[MESSAGE_TYPE_POS] = MessageType.INITIAL_DIRECTION.value;
+		}
+		
+		
+	}
 	
 }

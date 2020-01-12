@@ -30,11 +30,12 @@ public class Landscaper extends RobotPlayer {
     static void runDefaultMode() throws GameActionException {
     	
     	// Find HQ and initialize second row locations
-    	if (hqLoc == null) {
+    	if (hqLoc == null)
     		Util.tryFindHQ();
     	
+    	// Once HQ is found, initialize second row locations for each landscaper
+    	if (hqLoc != null)
     		initializeSecondRowLocations();
-    	}
     	
     	MapLocation currLoc = rc.getLocation(); 	
     	
