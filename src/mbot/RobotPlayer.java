@@ -1,6 +1,9 @@
 package mbot;
 
+import java.util.PriorityQueue;
+
 import battlecode.common.*;
+import mbot.Communication.*;
 
 public strictfp class RobotPlayer {
     static RobotController rc;
@@ -17,9 +20,6 @@ public strictfp class RobotPlayer {
     };
     
     static RobotType[] spawnedByMiner = {RobotType.REFINERY, RobotType.VAPORATOR, RobotType.DESIGN_SCHOOL, RobotType.FULFILLMENT_CENTER, RobotType.NET_GUN};
-
-    // Communication instance for each robot
-    
     
     static int turnCount;
 	static MapLocation hqLoc;
@@ -29,6 +29,7 @@ public strictfp class RobotPlayer {
     static int numSchools = 0;
     static int numCenters = 0;
     static int numDesignSchools = 0;
+    static PriorityQueue<Message> messageQ = new PriorityQueue<Message>();
     
     static int defaultBid = 1;
     
