@@ -839,28 +839,22 @@ public strictfp class RobotPlayer {
                 tV = -hqLoc.y/v3y;
             // Compute px and py
             if (v3y == 0 || tH < tV) {
+                py = hqLoc.y + tH * v3y;
                 // Left edge
-                if (v3x < 0) {
+                if (v3x < 0)
                     px = 0;
-                    py = hqLoc.y + tH * v3y;
-                }
                 // Right edge
-                else {
+                else
                     px = mapWidth-1;
-                    py = hqLoc.y + tH * v3y;
-                }
             }
             else {
+                px = hqLoc.x + tV * v3x;
                 // Bottom edge
-                if (v3y < 0) {
-                    px = hqLoc.x + tV * v3x;
+                if (v3y < 0)
                     py = 0;
-                }
                 // Top edge
-                else {
-                    px = hqLoc.x + tV * v3x;
+                else
                     py = mapHeight-1;
-                }
             }
             destinations[i+1] = new MapLocation((int) Math.round(px), (int) Math.round(py));
         }
