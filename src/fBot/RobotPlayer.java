@@ -194,6 +194,7 @@ public strictfp class RobotPlayer {
 	}
 	
 
+	//Miner code
 	static void runMiner() throws GameActionException {
 		findHQ();
 		
