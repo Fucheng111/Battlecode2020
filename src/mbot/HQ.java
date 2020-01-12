@@ -3,12 +3,16 @@ package mbot;
 import java.util.*;
 
 import battlecode.common.*;
+import mbot.Communication.*;
 import mbot.RobotPlayer;
 
 public class HQ extends RobotPlayer {
 	static ArrayList<MapLocation> soupLocations = new ArrayList<>();
 	static ArrayList<MapLocation> refineryLocations = new ArrayList<>();
 	static int enemyHighestCost;
+	
+	static final MapLocation location = rc.getLocation();
+	
 	/**
 	 * TODO blockchain handling
 	 * 
@@ -16,61 +20,45 @@ public class HQ extends RobotPlayer {
 	 * @throws GameActionException
 	 */
     static void run() throws GameActionException {
-    	// Handle incoming Transactions
-    	for(Transaction tx : rc.getBlock(rc.getRoundNum() - 1)) {
-            int[] mess = tx.getMessage();
-            
-            // If team transaction
-            if (mess[2] == TEAM_SECRET) {
-            	if (mess[3] == 1) { // Add new soup location
-            		
-            	} else if (mess[3] == 2) { // add new refinery location
-            		
-            	}
-            } else {
-            	// if econ is good, start trying to outbid enemy
-            	int teamSoup = rc.getTeamSoup();
-            	int enemyBid = tx.getCost();
+    	
+		broadcastLocationIfNotInBlockchain();
+		
+		
+    }
+    
+    static void sendMiners() {
+    	int mapWidth = rc.getMapWidth();
+    	int mapHeight = rc.getMapHeight();
+    	
+    	
+    }
+    
+    /**
+     * A one-time function that broadcasts the HQ location to the blockchain
+     * if it is not in there already.
+     * 
+     * @throws GameActionException
+     */
+    static boolean locationInBlockchain = false;
+    static void broadcastLocationIfNotInBlockchain() throws GameActionException {
+    	if (locationInBlockchain) return;
+    	
+		// Check again if location is in blockchain
+        for (int i = 1; i < rc.getRoundNum(); i++){
+            for(Transaction tx : rc.getBlock(i)) {
+                
+            	Message m = new Message(tx);
+            	MessageType type = m.getMessageType();
             	
-            	
-            	if (teamSoup > 2000 && enemyBid > defaultBid) {
-            		defaultBid = enemyBid + 1;
-            	} else if (teamSoup < 2000) {
-            		defaultBid = 1;
-            	}
-
-            	if (teamSoup > 1000 && turnCount < 200 && enemyBid > defaultBid) {
-            		defaultBid = enemyBid + 1;
+            	if (m.isTeamMessage() && type == MessageType.HQ_FOUND) {
+            		locationInBlockchain = true;
+            		return;
             	}
             }
-            
-        }
-    	
-        if(numMiners < 5) {
-            for (Direction dir : directions)
-                if (tryBuild(RobotType.MINER, dir)) {
-                	// add one to miner count
-                    numMiners++;
-                }
-        } else if (rc.getTeamSoup() > 500 && numMiners < 10) {
-        	for (Direction dir : directions)
-                if (tryBuild(RobotType.MINER, dir)) {
-                	// add one to miner count
-                    numMiners++;
-                }
         }
         
-        // Potential Rush Defense?
-        
-        // While HQ loc not in blockchain, send location
-        if (!getHqLocFromBlockchain())
-        	sendLocation();
+        // Try to broadcast again
+        new HQFoundMessage().setInfo(location.x, location.y).tryBroadcast();
     }
-    
-    static void sendLocation() throws GameActionException {
-    	MapLocation loc = rc.getLocation();
-    	broadcastMessage(defaultBid, loc.x, loc.y, TEAM_SECRET, 4, 0, 0, 0);
-    }
-    
 }
 
