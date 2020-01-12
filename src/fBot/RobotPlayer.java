@@ -128,6 +128,8 @@ public strictfp class RobotPlayer {
 				hqLoc = rc.getLocation();
 				soupLocList = new ArrayList<MapLocation>();
 				initiation = true;
+				
+				
 			}
 		}
 
