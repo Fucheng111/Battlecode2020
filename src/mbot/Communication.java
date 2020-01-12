@@ -1,30 +1,47 @@
 package mbot;
 
 import battlecode.common.GameActionException;
+import battlecode.common.MapLocation;
+import battlecode.common.Transaction;
 
 public class Communication extends RobotPlayer {
 	static final int TEAM_CODE_POS = 2;
 	static final int MESSAGE_TYPE_POS = 3;
 	
-	public enum MessageType {
-		HQ_FOUND(0), REFINERY_CREATED(1), VAPORATOR_CREATED(2), DESIGN_SCHOOL_CREATED(3), FULFILLMENT_CENTER_CREATED(4),
-		NET_GUN_CREATED(5), SOUP_LOCATION(8), SOUP_GONE(9);
+	/**
+	 * Message type Enum that maps each type to a unique code value.
+	 * 
+	 * @author mark jung
+	 *
+	 */
+	public static enum MessageType {
+		HQ_FOUND(0, HQFoundMessage.class), REFINERY_CREATED(1, RefineryCreatedMessage.class), VAPORATOR_CREATED(2, VaporatorCreatedMessage.class), 
+		DESIGN_SCHOOL_CREATED(3, DesignSchoolCreatedMessage.class), FULFILLMENT_CENTER_CREATED(4, FulfillmentCenterCreatedMessage.class),
+		NET_GUN_CREATED(5, NetGunCreatedMessage.class), SOUP_LOCATION(8, SoupLocationMessage.class), SOUP_GONE(9, SoupGoneMessage.class);
 		
 		int value;
+		Class c;
 		
-		MessageType(int code) {
+		MessageType(int code, Class c) {
 			this.value = code;
+			this.c = c;
 		}
 	}
 	
-	public class UnknownMessage {
-		
-	}
-	
-	public abstract class Message {
+	/**
+	 * Generic message class that is extended by all other message classes.
+	 * 
+	 * @author mark jung
+	 *
+	 */
+	public static class Message {
 		public int code;
 		public int bid;
 		public int[] message;
+		
+		public int cost;
+		public boolean teamMessage;
+		public MessageType messageType;
 		
 		public Message() {
 			this(defaultBid);
@@ -36,6 +53,18 @@ public class Communication extends RobotPlayer {
 			this.message[TEAM_CODE_POS] = TEAM_SECRET;
 		}
 		
+		public Message(Transaction tx) {
+			message = tx.getMessage();
+			cost = tx.getCost();
+			
+			teamMessage = message[TEAM_CODE_POS] == TEAM_SECRET;
+			
+			for (MessageType mt : MessageType.values()) {
+				if (mt.value == message[MESSAGE_TYPE_POS]) {
+					messageType = mt;				}
+			}
+		}
+		
 		public boolean tryBroadcast() throws GameActionException {
 			if (rc.canSubmitTransaction(message, bid)) {
 	            rc.submitTransaction(message, bid);
@@ -43,9 +72,26 @@ public class Communication extends RobotPlayer {
 	        }
 			return false;
 		}
+		
+		/**
+		 * Return map location for each message.
+		 * 
+		 * @return
+		 */
+		public MapLocation getLocation() {
+			return new MapLocation(message[0], message[1]);
+		}
+		
+		public boolean isTeamMessage() {
+			return teamMessage;
+		}
+		
+		public MessageType getMessageType() {
+			return messageType;
+		}
 	}
 	
-	public class HQFoundMessage extends Message {
+	public static class HQFoundMessage extends Message {
 		public HQFoundMessage() {
 			this(defaultBid);
 		}
@@ -64,7 +110,7 @@ public class Communication extends RobotPlayer {
 		}
 	}
 	
-	public class RefineryCreatedMessage extends Message {
+	public static class RefineryCreatedMessage extends Message {
 		public RefineryCreatedMessage() {
 			this(defaultBid);
 		}
@@ -83,7 +129,7 @@ public class Communication extends RobotPlayer {
 		}
 	}
 	
-	public class VaporatorCreatedMessage extends Message {
+	public static class VaporatorCreatedMessage extends Message {
 		public VaporatorCreatedMessage() {
 			this(defaultBid);
 		}
@@ -102,7 +148,7 @@ public class Communication extends RobotPlayer {
 		}
 	}
 	
-	public class DesignSchoolCreatedMessage extends Message {
+	public static class DesignSchoolCreatedMessage extends Message {
 		public DesignSchoolCreatedMessage() {
 			this(defaultBid);
 		}
@@ -122,7 +168,7 @@ public class Communication extends RobotPlayer {
 		}
 	}
 	
-	public class FulfillmentCenterCreatedMessage extends Message {
+	public static class FulfillmentCenterCreatedMessage extends Message {
 		public FulfillmentCenterCreatedMessage() {
 			this(defaultBid);
 		}
@@ -141,7 +187,7 @@ public class Communication extends RobotPlayer {
 		}
 	}
 	
-	public class NetGunCreatedMessage extends Message {
+	public static class NetGunCreatedMessage extends Message {
 		public NetGunCreatedMessage() {
 			this(defaultBid);
 		}
@@ -160,7 +206,7 @@ public class Communication extends RobotPlayer {
 		}
 	}
 	
-	public class SoupLocationMessage extends Message {
+	public static class SoupLocationMessage extends Message {
 		public SoupLocationMessage() {
 			this(defaultBid);
 		}
@@ -179,7 +225,7 @@ public class Communication extends RobotPlayer {
 		}
 	}
 
-	public class SoupGoneMessage extends Message {
+	public static class SoupGoneMessage extends Message {
 		public SoupGoneMessage() {
 			this(defaultBid);
 		}
