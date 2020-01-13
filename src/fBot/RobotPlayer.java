@@ -221,8 +221,15 @@ public strictfp class RobotPlayer {
 					if(!rc.canSenseLocation(rc.getLocation().add(dir)))
 						break;
 
-					if(searchSurrondingForSoup(rc.getCurrentSensorRadiusSquared())) 
-						break;
+					for (Direction dire : directions)
+						if (tryRefine(dire))             
+							System.out.println("I refined soup! " + rc.getTeamSoup());
+					for (Direction dire : directions)
+						if (tryMine(dire)) {
+							broadcastMessage(1,rc.getLocation().add(dire).x,rc.getLocation().add(dire).y,teamCode,foundSoup,1,1,1);
+							soupLoc = rc.getLocation().add(dire);
+							return;
+						}
 
 					if(goTo(dir)) 
 						System.out.println("I'm Moving in "+dir.name());
