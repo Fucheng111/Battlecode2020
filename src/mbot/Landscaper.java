@@ -6,6 +6,8 @@ import battlecode.common.*;
 
 public class Landscaper extends RobotPlayer {
 	static final int DEFAULT_MODE = 0;
+	static final int BURY_ENEMY_BUILDINGS = 1;
+	
 	static boolean nearHQ = false;
 	// Deposit locations for second row landscapers
 	static ArrayList<MapLocation> secondRowLocations;
@@ -13,7 +15,12 @@ public class Landscaper extends RobotPlayer {
 	static int mode = 0; 
 	
     static void run() throws GameActionException {
-
+    	
+    	// Find HQ
+    	if (hqLoc == null) {
+    		Util.tryFindHQ();
+    	}
+    	
     	if (mode == DEFAULT_MODE)
     		runDefaultMode();
     	
@@ -29,18 +36,15 @@ public class Landscaper extends RobotPlayer {
      */
     static void runDefaultMode() throws GameActionException {
     	
-    	// Find HQ and initialize second row locations
-    	if (hqLoc == null)
-    		Util.tryFindHQ();
-    	
     	// Once HQ is found, initialize second row locations for each landscaper
-    	if (hqLoc != null)
+    	if (hqLoc != null) {
     		initializeSecondRowLocations();
+    	}
     	
     	MapLocation currLoc = rc.getLocation(); 	
     	
     	// Move if not in position
-    	if (!nearHQ) {
+    	if (hqLoc != null && !nearHQ) {
     		Util.goTo(hqLoc);
     		currLoc = rc.getLocation();
     		
@@ -62,17 +66,14 @@ public class Landscaper extends RobotPlayer {
 	    		if (bothScapers)
 	    			nearHQ = true;
 	    	}
-    	}
-    	
-    	// Trump Inc.
-    	if (nearHQ) {
+    	} else if (hqLoc != null && nearHQ) {
     		if (rc.getDirtCarrying() == 0)
     			Util.tryDig(currLoc.directionTo(hqLoc).opposite());
     		else {
     			
     			// If adj, dump dirt on itself
     			if (currLoc.isAdjacentTo(hqLoc))
-    				rc.depositDirt(Direction.CENTER);
+    				Util.tryDeposit(Direction.CENTER);
     			
     			// Otherwise, alternate between which landscaper deposits directly next
     			// to itself or diagonally next to itself.
@@ -90,13 +91,14 @@ public class Landscaper extends RobotPlayer {
     				}
     				
     				if (depositDir != null && rc.canDepositDirt(depositDir)) 
-    					rc.depositDirt(depositDir);
+    					Util.tryDeposit(depositDir);
     			}		
     		}
     	}
     }
 
 	private static void initializeSecondRowLocations() throws GameActionException {
+		secondRowLocations = new ArrayList<>();
         int rad = 5;
         
         for (int i = -rad; i < rad; i++) {

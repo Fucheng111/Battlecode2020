@@ -1,34 +1,38 @@
 package mbot;
 
+import java.util.HashSet;
+import java.util.PriorityQueue;
+
 import battlecode.common.Direction;
 import battlecode.common.GameActionException;
 import battlecode.common.MapLocation;
 import battlecode.common.RobotInfo;
 import battlecode.common.RobotType;
 import battlecode.common.Transaction;
+import mbot.Communication.Message;
+import mbot.Communication.MessageType;
 
 public class Util extends RobotPlayer {	
     static void tryFindHQ() throws GameActionException {
-        if (hqLoc == null) {
-            // search surroundings for HQ
-            RobotInfo[] robots = rc.senseNearbyRobots();
-            for (RobotInfo robot : robots) {
-                if (robot.type == RobotType.HQ && robot.team == rc.getTeam()) {
-                    hqLoc = robot.location;
-                }
+        // search surroundings for HQ
+        RobotInfo[] robots = rc.senseNearbyRobots();
+        for (RobotInfo robot : robots) {
+            if (robot.type == RobotType.HQ && robot.team == rc.getTeam()) {
+                hqLoc = robot.location;
             }
-            if(hqLoc == null) {
-                getHqLocFromBlockchain();
-            }
+        }
+        if(hqLoc == null) {
+        	
+            getHqLocFromBlockchain();
         }
     }
 	
     public static boolean getHqLocFromBlockchain() throws GameActionException {
         for (int i = 1; i < rc.getRoundNum(); i++) {
             for(Transaction tx : rc.getBlock(i)) {
-                int[] mess = tx.getMessage();
-                if(mess[2] == TEAM_SECRET && mess[3] == 4){
-                    hqLoc = new MapLocation(mess[0], mess[1]);
+                Message msg = new Message(tx);
+                if(msg.isTeamMessage() && msg.getMessageType() == MessageType.HQ_FOUND) {
+                    hqLoc = msg.getLocation();
                     return true;
                 }
             }
@@ -153,6 +157,37 @@ public class Util extends RobotPlayer {
         }
         return false;
     }
+    
+    /**
+     * Attempts to deposit dirt in a given direction.
+     * 
+     * @param dir
+     * @return
+     * @throws GameActionException
+     */
+    static boolean tryDeposit(Direction dir) throws GameActionException {
+    	if (rc.canDepositDirt(dir)) {
+    		rc.depositDirt(dir);
+    		return true;
+    	}
+    	return false;
+    }
+    
+    /**
+     * Move towards a specified location while zigzagging, maximimizing exploration
+     * 
+     * @param location The intended destination
+     * @return false if arrived at destination
+     * @throws GameActionException
+     */
+    static boolean exploreMove(MapLocation location) throws GameActionException {
+        // TODO: exploreMove (we use goTo as a substitute for now)
+        goTo(location);
+        if (rc.getLocation().isAdjacentTo(location))
+            return false;
+        return true;
+    }
+    
  // tries to move in the general direction of dir
     static boolean goTo(Direction dir) throws GameActionException {
         Direction[] toTry = {dir, dir.rotateLeft(), dir.rotateRight(), dir.rotateLeft().rotateLeft(), dir.rotateRight().rotateRight()};
@@ -177,6 +212,13 @@ public class Util extends RobotPlayer {
         }
         return false;
     }
+    
+	/**
+	 * Remove duplicates from messageQ. A nonoptimal solution.
+	 */
+	static void cleanMessageQ() {
+		messageQ = new PriorityQueue<Message>(new HashSet<Message>(messageQ));
+	}
     
     static void printAction(String action) {
     	int id = rc.getID();

@@ -17,8 +17,8 @@ public class Communication extends RobotPlayer {
 	public static enum MessageType {
 		HQ_FOUND(0, HQFoundMessage.class), REFINERY_CREATED(1, RefineryCreatedMessage.class), VAPORATOR_CREATED(2, VaporatorCreatedMessage.class), 
 		DESIGN_SCHOOL_CREATED(3, DesignSchoolCreatedMessage.class), FULFILLMENT_CENTER_CREATED(4, FulfillmentCenterCreatedMessage.class),
-		NET_GUN_CREATED(5, NetGunCreatedMessage.class), SOUP_LOCATION(8, SoupLocationMessage.class), SOUP_GONE(9, SoupGoneMessage.class),
-		INITIAL_DIRECTION(10, InitialDirectionMessage.class);
+		NET_GUN_CREATED(5, NetGunCreatedMessage.class), MINER_IDLE(6, MinerIdleMessage.class), SOUP_LOCATION(8, SoupLocationMessage.class), SOUP_GONE(9, SoupGoneMessage.class),
+		EXPLORE(10, ExploreMessage.class);
 		
 		int value;
 		Class c;
@@ -40,7 +40,6 @@ public class Communication extends RobotPlayer {
 		public int bid;
 		public int[] message;
 		
-		public int cost;
 		public boolean teamMessage;
 		public MessageType messageType;
 		
@@ -56,7 +55,7 @@ public class Communication extends RobotPlayer {
 		
 		public Message(Transaction tx) {
 			message = tx.getMessage();
-			cost = tx.getCost();
+			bid = tx.getCost();
 			
 			teamMessage = message[TEAM_CODE_POS] == TEAM_SECRET;
 			
@@ -83,6 +82,16 @@ public class Communication extends RobotPlayer {
 			return new MapLocation(message[0], message[1]);
 		}
 		
+		/**
+		 * Return id for each message, if it contains one.
+		 * Returns 0 otherwise.
+		 * 
+		 * @return
+		 */
+		public int getId() {
+			return message[4];
+		}
+		
 		public boolean isTeamMessage() {
 			return teamMessage;
 		}
@@ -94,7 +103,7 @@ public class Communication extends RobotPlayer {
 		@Override
 		public int compareTo(Message o) {
 			// Higher cost means higher priority (aka comes first in ordering)
-			return o.cost - this.cost;
+			return o.bid - this.bid;
 		}
 	}
 	
@@ -251,18 +260,44 @@ public class Communication extends RobotPlayer {
 		}
 	}
 	
-	public static class InitialDirectionMessage extends Message {
-		public InitialDirectionMessage() {
+	public static class ExploreMessage extends Message {
+		public ExploreMessage() {
 			this(defaultBid);
 		}
 		
-		public InitialDirectionMessage(int bid) {
+		public ExploreMessage(int bid) {
 			super(bid);
 			
-			message[MESSAGE_TYPE_POS] = MessageType.INITIAL_DIRECTION.value;
+			message[MESSAGE_TYPE_POS] = MessageType.EXPLORE.value;
 		}
 		
+		public ExploreMessage setInfo(int xLoc, int yLoc, int id) {
+			message[0] = xLoc;
+			message[1] = yLoc;
+			message[4] = id;
+			
+			return this;
+		}
+	}
+	
+	public static class MinerIdleMessage extends Message {
+		public MinerIdleMessage() {
+			this(defaultBid);
+		}
 		
+		public MinerIdleMessage(int bid) {
+			super(bid);
+			
+			message[MESSAGE_TYPE_POS] = MessageType.EXPLORE.value;
+		}
+		
+		public MinerIdleMessage setInfo(int xLoc, int yLoc, int id) {
+			message[0] = xLoc;
+			message[1] = yLoc;
+			message[4] = id;
+			
+			return this;
+		}
 	}
 	
 }
