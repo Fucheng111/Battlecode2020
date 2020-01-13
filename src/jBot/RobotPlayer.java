@@ -27,10 +27,9 @@ public strictfp class RobotPlayer {
     };
     static final int TEAM_SECRET = 789;
 
-    static boolean waitMode = false;    // Ensures that miners don't keep trying to broadcast message 10
+    static boolean waitMode = false;    // Ensures that miners don't keep trying to broadcast that they need a task
     static boolean nearHQ = false;
     static boolean leftTendency = false;
-    static boolean carryingCow = false;
     static int turnCount;
     static int numMiners = 0;
     static int numDrones = 0;
