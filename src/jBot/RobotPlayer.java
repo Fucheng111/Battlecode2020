@@ -25,7 +25,6 @@ public strictfp class RobotPlayer {
         RobotType.FULFILLMENT_CENTER,   // 4
         RobotType.NET_GUN               // 5
     };
-    static final int TEAM_SECRET = 789;
 
     static boolean waitMode = false;    // Ensures that miners don't keep trying to broadcast that they need a task
     static boolean nearHQ = false;
@@ -47,7 +46,33 @@ public strictfp class RobotPlayer {
     static ArrayList<MapLocation> refineryLocs = new ArrayList<MapLocation>();
     static ArrayList<MapLocation> waterLocs = new ArrayList<MapLocation>();
     static ArrayList<MapLocation> secondRowLocations = new ArrayList<MapLocation>();
-
+    
+    // Communication
+    static final int TEAM_SECRET = 789;
+    static final int HQ_LOC                 = 0;    // [x, y, code]
+    static final int REFINERY_CREATED       = 1;    // [x, y, code]
+    static final int VAPORATOR_CREATED      = 2;    // [x, y, code]
+    static final int DESIGN_SCHOOL_CREATED  = 3;    // [x, y, code, ID]
+    static final int FULFILLMENT_CREATED    = 4;    // [x, y, code, ID]
+    static final int NET_GUN_CREATED        = 5;    // [x, y, code]
+    static final int DESIGN_SCHOOL_TAS      = 6;    // [x, y, code, ID]
+    static final int FULLFILLMENT_TASK      = 7;    // [x, y, code, ID]
+    static final int MINER_IDLE             = 8;    // [x, y, code, ID]
+    static final int MINER_TASK             = 9;    // [x, y, code, ID, buildingID/-1 for soup/0 for wander]
+    static final int LANDSCAPER_SPAWN       = 10;   // [x, y, code, ID]
+    static final int LANDSCAPER_TASK        = 11;   // [x, y, code, ID, activity]
+    static final int DRONE_SPAWN            = 12;   // [x, y, code, ID]
+    static final int DRONE_TASK             = 13;   // [x, y, code, ID, activity]
+    static final int INIT_SOUP_LOCS         = 14;   // [1+x1+y1+x2+y2, 1+x3+y3+x4+y4, code, 1+x5+y5+x6+y6, ...] (up to 12 locs)
+    static final int INIT_WATER_LOCS        = 15;   // [1+x1+y1+x2+y2, 1+x3+y3+x4+y4, code, 1+x5+y5+x6+y6, ...] (up to 12 locs)
+    static final int INIT_REFINERY_LOCS     = 16;   // [1+x1+y1+x2+y2, 1+x3+y3+x4+y4, code, 1+x5+y5+x6+y6, ...] (up to 12 locs)
+    static final int SOUP_FOUND             = 17;   // [x, y, code]
+    static final int SOUP_GONE              = 18;   // [x, y, code]
+    static final int WATER_FOUND            = 19;   // [x, y, code]
+    static final int WATER_GONE             = 20;   // [x, y, code]
+    static final int REFINERY_DESTROYED     = 21;   // [x, y, code]
+    static final int ENEMY_HQ_FOUND         = 22;   // [x, y, code]
+    
     /**
      * run() is the method that is called when a robot is instantiated in the Battlecode world.
      * If this method returns, the robot dies!
