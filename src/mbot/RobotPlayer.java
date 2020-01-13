@@ -34,7 +34,7 @@ public strictfp class RobotPlayer {
     
     static PriorityQueue<Message> messageQ = new PriorityQueue<Message>();
     
-    static int defaultBid = 3;
+    static int defaultBid = 1;
     
     static final int TEAM_SECRET = 420;
     

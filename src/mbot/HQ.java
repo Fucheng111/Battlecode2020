@@ -2,8 +2,6 @@ package mbot;
 
 import java.util.*;
 
-import com.sun.tools.javap.TryBlockWriter;
-
 import battlecode.common.*;
 import mbot.Communication.*;
 import mbot.RobotPlayer;
@@ -27,7 +25,6 @@ public class HQ extends RobotPlayer {
 	 */
     static void run() throws GameActionException {
     	
-    	
     	if (exploreLocations.isEmpty())
     		exploreLocations = new ArrayList<>(Arrays.asList(bestMinerLocs(4)));
     	
@@ -35,7 +32,7 @@ public class HQ extends RobotPlayer {
 		
 		// Listen for communication
 		if (rc.getRoundNum() > 1)
-			listenForCommunication();
+			listenForCommunicationAndRelay();
 		
 		// Create initial miners
 		createInitialMiners();
@@ -50,18 +47,23 @@ public class HQ extends RobotPlayer {
      * Listen for incoming communiques from other bots.
      * <br>Listens for MINER_IDLE and broadcasts next location in exploreLocations
      * <br>Listens for SOUP_FOUND and rebroadcasts it to other miners
+     * <br>Listens for SOUP_GONE and rebroadcasts it to other miners
      * 
      * @throws GameActionException
      */
-    private static void listenForCommunication() throws GameActionException {
+    private static void listenForCommunicationAndRelay() throws GameActionException {
 		
     	// Listen for miner idle communications
     	for (Transaction tx : rc.getBlock(rc.getRoundNum() - 1)) {
     		Message msg = new Message(tx);
     		MessageType type = msg.getMessageType();
     		
+    		Util.printAction("SCANNER MESSAGE TYPE " + type);
+    		
     		if (msg.isTeamMessage()) {
     			if (type == MessageType.MINER_IDLE) {
+    				Util.printAction("RECIEVED MINER_IDLE MESSAGE");
+    				
     				int minerId = msg.getId();
     				
     				// loop back around initialExploreLocations if needed
@@ -72,28 +74,41 @@ public class HQ extends RobotPlayer {
     				
     				ExploreMessage message = new ExploreMessage();
     				
+    				Util.printAction("TRY BROADCAST EXPLORE_MESSAGE MESSAGE TO MINER:" + loc.toString() + " " + minerId);
+    				
     				if (message.setInfo(loc.x, loc.y, minerId).tryBroadcast())
     					messageQ.add(msg);
    
     			} else if (type == MessageType.SOUP_LOCATION) {
-    				soupLocations.add(msg.getLocation());
-    				
-    				if (!msg.tryBroadcast())
-    					messageQ.add(msg);
+					
+					if (soupLocations.add(msg.getLocation()) && !msg.tryBroadcast()) {
+						Util.printAction("TRY BROADCAST SOUP_LOCATION MESSAGE AT: " + msg.getLocation());
+						messageQ.add(msg);
+					}
     				
     			} else if (type == MessageType.SOUP_GONE) {
-    				soupLocations.remove(msg.getLocation());
     				
-    				if (!msg.tryBroadcast())
+    				if (soupLocations.remove(msg.getLocation()) && !msg.tryBroadcast()) {
+    					Util.printAction("TRY BROADCAST SOUP_GONE MESSAGE AT: " + msg.getLocation());
     					messageQ.add(msg);
+    				}
     				
+    			}
+    		} else {
+    			// If not team message
+    			// Check cost
+    			int cost = tx.getCost();
+    			
+    			if (cost > defaultBid) {
+    				Util.printAction("CHANGED DEFAULT BID TO " + cost);
+    				defaultBid = cost;
     			}
     		}
     	}		
 	}
 
 	static void createInitialMiners() throws GameActionException {
-    	if (numMiners <= 4) {
+    	if (numMiners < 4) {
 			if (Util.tryBuild(RobotType.MINER, Util.randomDirection())) {
 				numMiners++;
 			}
@@ -277,6 +292,11 @@ public class HQ extends RobotPlayer {
             destinations[i+1] = new MapLocation((int) Math.round(px), (int) Math.round(py));
         }
 
+        StringBuilder sb = new StringBuilder();
+        for (MapLocation d : destinations)
+        	sb.append(d.toString() + "\n");
+        Util.printAction("*** EXPLORE DESTINATIONS *** \n" + sb.toString());
+        
         return destinations;
     }
 

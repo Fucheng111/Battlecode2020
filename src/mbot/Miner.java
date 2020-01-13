@@ -51,32 +51,46 @@ public class Miner extends RobotPlayer {
 	
 	
 	static void runExploreMode() throws GameActionException {
+		Util.printAction("--- EXPLORING --- exploreDest exists: " + (exploreDest != null));
+		
 		MapLocation currLoc = rc.getLocation();
 		
-		// If exploreDest is null, try to find directions, otherwise,
+		// If exploreDest is null or at exploreDest, try to find directions, otherwise,
 		// ask for directions
-		if (exploreDest == null) {
+		if (exploreDest == null || currLoc.equals(exploreDest)) {
+			Util.printAction("WAITING FOR INSTRUCTIONS");
 			for (Transaction tx: rc.getBlock(rc.getRoundNum() - 1)) {
 				Message msg = new Message(tx);
 				
 				if (msg.isTeamMessage() && msg.getMessageType() == MessageType.EXPLORE)
-					if (msg.getId() == rc.getID())
+					if (msg.getId() == rc.getID()) {
 						exploreDest = msg.getLocation();
+						Util.exploreMove(exploreDest);
+						
+						Util.printAction("RECIEVED INSTRUCTIONS TO GO TO: " + exploreDest.toString() + " " + Arrays.toString(tx.getMessage()));
+					}
 			}
 			
-			// If still null
-			if (exploreDest == null) {
+			// If still null, ask for directions and move randomly until then
+			if (exploreDest == null || currLoc.equals(exploreDest)) {
 				MinerIdleMessage msg = new MinerIdleMessage();
 	            
 	            if (!msg.setInfo(currLoc.x, currLoc.y, rc.getID()).tryBroadcast())
 	            	messageQ.add(msg);
+	            else
+	            	Util.printAction("SENT MINER IDLE REQUEST");
 			}
 		} else {
+			rc.setIndicatorLine(rc.getLocation(), exploreDest, 100, 0, 0);
 			Util.exploreMove(exploreDest);
 		}
 			
         // Change to mode 1 and update explore if soup is found and move straight to default mode
+		// If it hasn't found soup by round 100, move to default mode as well
         if (checkForSoup()) {
+        	mode = DEFAULT_MODE;
+        	return;
+        } else if (rc.getRoundNum() > 70) {
         	mode = DEFAULT_MODE;
         	return;
         }
@@ -87,10 +101,12 @@ public class Miner extends RobotPlayer {
 	 * 
 	 */
 	static void runDefaultMode() throws GameActionException {
+		Util.printAction("--- MINING AND REFINING ---");
+		
 		MapLocation currLoc = rc.getLocation();
 		
 		// Update soupLocations and refineryLocations from blockchain
-		// Calculate nearest soup and refinery location and update
+		// Calculate nearestSoup and nearestRefinery and update
 		// Check for nearby design schools
 		if (rc.getRoundNum() > 1)
 			updateLocationsFromBlockchain();
@@ -114,12 +130,15 @@ public class Miner extends RobotPlayer {
 		 */
 		if (rc.getSoupCarrying() == RobotType.MINER.soupLimit) {
 			
-			// If the nearest refinery is more than 1/6 the map width away, build a nearer refinery
-			if ((nearestRefinery == null || currLoc.distanceSquaredTo(nearestRefinery) > 8) && rc.getTeamSoup() > 150) {
+			if ((nearestRefinery == null || currLoc.distanceSquaredTo(nearestRefinery) > 25) && rc.getTeamSoup() > 150) {
 				
 				buildRefineryAndBroadcast();
 
-			} else {				
+			} else if ((nearestRefinery == null || currLoc.distanceSquaredTo(nearestRefinery) > 90)) {
+				
+				// if super far away, just wait until refinery can be built
+				
+			} else if (nearestRefinery != null) {				
 				
 				Util.goTo(nearestRefinery);		
 				
@@ -131,11 +150,12 @@ public class Miner extends RobotPlayer {
 			
 		} else if (nearestSoup != null) {
 			
+			rc.setIndicatorLine(rc.getLocation(), nearestSoup, 0, 100, 0);
 			Util.goTo(nearestSoup);
 			
 		} else {
 			
-			Util.tryMove(Util.randomDirection());
+			Util.goTo(Util.randomDirection());
 			
 		}
 	}
@@ -176,9 +196,14 @@ public class Miner extends RobotPlayer {
 				MapLocation soupLoc = currLoc.add(dir);
 				
 				if (soupLocations.add(soupLoc)) {
-					SoupLocationMessage msg = new SoupLocationMessage();
-					if (!msg.setInfo(soupLoc.x, soupLoc.y).tryBroadcast())
-						messageQ.add(msg);
+					
+					// only broadcast when econ is good, i.e. not early game
+					if (rc.getTeamSoup() > 70) {
+						SoupLocationMessage msg = new SoupLocationMessage();
+						if (!msg.setInfo(soupLoc.x, soupLoc.y).tryBroadcast())
+							messageQ.add(msg);						
+					}
+					
 				}
 				
 				if (nearestSoup == null || !nearestSoup.equals(soupLoc)) // Update nearest soup
@@ -282,19 +307,19 @@ public class Miner extends RobotPlayer {
         return newSoupFound;
     }
 	
-	/**
-	 * Get latest exploreMessage from the blockchain
-	 * @throws GameActionException 
-	 */
-	static void getInitialExploreFromBlockchain() throws GameActionException {
-		for (Transaction tx : rc.getBlock(rc.getRoundNum() - 1)) {
-			Message msg = new Message(tx);
-			MessageType mt = msg.getMessageType();
-			
-			if (msg.isTeamMessage() && mt == MessageType.EXPLORE)
-				exploreDest = msg.getLocation();
-		}
-	}
+//	/**
+//	 * Get latest exploreMessage from the blockchain
+//	 * @throws GameActionException 
+//	 */
+//	static void getInitialExploreFromBlockchain() throws GameActionException {
+//		for (Transaction tx : rc.getBlock(rc.getRoundNum() - 1)) {
+//			Message msg = new Message(tx);
+//			MessageType mt = msg.getMessageType();
+//			
+//			if (msg.isTeamMessage() && mt == MessageType.EXPLORE)
+//				exploreDest = msg.getLocation();
+//		}
+//	}
 	
 	/**
 	 * Reads the previous round's block from blockchain and updates soupLocs, refineryLocs, and
