@@ -25,13 +25,16 @@ public strictfp class RobotPlayer {
 	static MapLocation hqLoc;
     
     static int numMiners = 0;
-    static int numLandscapers = 0;
+    
     static int numSchools = 0;
     static int numCenters = 0;
+	static int numLandscapers = 0;
     static int numDesignSchools = 0;
+    
+    
     static PriorityQueue<Message> messageQ = new PriorityQueue<Message>();
     
-    static int defaultBid = 1;
+    static int defaultBid = 3;
     
     static final int TEAM_SECRET = 420;
     
@@ -47,9 +50,7 @@ public strictfp class RobotPlayer {
 //              System.out.println("I'm a " + rc.getType() + "! Location " + rc.getLocation());
                 switch (rc.getType()) {
                     case HQ:                 HQ.run();                break;
-                    case MINER:            
-                    	Miner.run();             
-                    	break;
+                    case MINER: 			 Miner.run();             break;
                     case REFINERY:           Refinery.run();          break;
                     case VAPORATOR:          Vaporator.run();         break;
                     case DESIGN_SCHOOL: 	 DesignSchool.run();      break;
