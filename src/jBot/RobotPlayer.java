@@ -26,9 +26,9 @@ public strictfp class RobotPlayer {
         RobotType.NET_GUN               // 5
     };
 
-    static boolean waitMode = false;    // Ensures that miners don't keep trying to broadcast that they need a task
     static boolean nearHQ = false;
     static boolean leftTendency = false;
+    static boolean findingRefinery = false;
     static int turnCount;
     static int numMiners = 0;
     static int numDrones = 0;
@@ -37,21 +37,30 @@ public strictfp class RobotPlayer {
     static int numNetGuns = 0;
     static int unitsQueued = 0;
     static int robotMode = -1;          // Default mode of -1 is the "do nothing" mode
-    static int robotNum;
+    static int buildingNum;
     static Direction destDir;
     static MapLocation hqLoc;
     static MapLocation enemyHQLoc;
     static MapLocation robotDest;
+    static MapLocation defaultMinerDest;
     static MapLocation lastBugPathLoc;
-    static PriorityQueue<int[]> messageQ = new PriorityQueue<int[]>();
-    static ArrayList<MapLocation> soupLocs = new ArrayList<MapLocation>();
-    static ArrayList<MapLocation> waterLocs = new ArrayList<MapLocation>();
-    static ArrayList<MapLocation> refineryLocs = new ArrayList<MapLocation>();
-    static ArrayList<MapLocation> designSchoolLocs = new ArrayList<MapLocation>();
+    static MapLocation[] desiredMinerDests;
+    static PriorityQueue<int[]> messageQ                = new PriorityQueue<int[]>();
+    static ArrayList<MapLocation> soupLocs              = new ArrayList<MapLocation>();
+    static ArrayList<MapLocation> waterLocs             = new ArrayList<MapLocation>();
+    static ArrayList<MapLocation> refineryLocs          = new ArrayList<MapLocation>();
+    static ArrayList<MapLocation> designSchoolLocs      = new ArrayList<MapLocation>();
     static ArrayList<MapLocation> fulfillmentCenterLocs = new ArrayList<MapLocation>();
-    static ArrayList<MapLocation> secondRowLocations = new ArrayList<MapLocation>();
+    static ArrayList<MapLocation> secondRowLocations    = new ArrayList<MapLocation>();
+
+    // Defensive positions
+    static MapLocation defensiveVapLoc;
+    static MapLocation defensiveCenterLoc;
+    static MapLocation defensiveSchoolLoc;
+    static ArrayList<MapLocation> defensiveGunLocs = new ArrayList<MapLocation>();
+    static ArrayList<MapLocation> defensiveDroneLocs = new ArrayList<MapLocation>();
     
-    // Communication
+    // Communication codes
     static final int TEAM_SECRET = 789;
     static final int HQ_LOC                 = 0;    // [x, y, code]
     static final int REFINERY_CREATED       = 1;    // [x, y, code]
@@ -60,22 +69,23 @@ public strictfp class RobotPlayer {
     static final int FULFILLMENT_CREATED    = 4;    // [x, y, code, ID]
     static final int NET_GUN_CREATED        = 5;    // [x, y, code]
     static final int DESIGN_SCHOOL_TASK     = 6;    // [x, y, code, ID]
-    static final int FULFILLMENT_TASK      = 7;    // [x, y, code, ID]
-    static final int MINER_IDLE             = 8;    // [x, y, code, ID]
-    static final int MINER_TASK             = 9;    // [x, y, code, ID, buildingID/-1 for soup/0 for wander]
-    static final int LANDSCAPER_SPAWN       = 10;   // [x, y, code, ID]
-    static final int LANDSCAPER_TASK        = 11;   // [x, y, code, ID, activity]
-    static final int DRONE_SPAWN            = 12;   // [x, y, code, ID]
-    static final int DRONE_TASK             = 13;   // [x, y, code, ID, activity]
-    static final int INIT_SOUP_LOCS         = 14;   // [1+x1+y1+x2+y2, 1+x3+y3+x4+y4, code, 1+x5+y5+x6+y6, ...] (up to 12 locs)
-    static final int INIT_WATER_LOCS        = 15;   // [1+x1+y1+x2+y2, 1+x3+y3+x4+y4, code, 1+x5+y5+x6+y6, ...] (up to 12 locs)
-    static final int INIT_REFINERY_LOCS     = 16;   // [1+x1+y1+x2+y2, 1+x3+y3+x4+y4, code, 1+x5+y5+x6+y6, ...] (up to 12 locs)
-    static final int SOUP_FOUND             = 17;   // [x, y, code]
-    static final int SOUP_GONE              = 18;   // [x, y, code]
-    static final int WATER_FOUND            = 19;   // [x, y, code]
-    static final int WATER_GONE             = 20;   // [x, y, code]
-    static final int REFINERY_DESTROYED     = 21;   // [x, y, code]
-    static final int ENEMY_HQ_FOUND         = 22;   // [x, y, code]
+    static final int FULFILLMENT_TASK       = 7;    // [x, y, code, ID]
+    static final int MINER_INIT_1           = 8;    // [x, y, code, ID]
+    static final int MINER_INIT_2           = 9;    // [x, y, code, ID]
+    static final int MINER_TASK             = 10;   // [x, y, code, ID, buildingID/-1 for soup/0 for wander]
+    static final int LANDSCAPER_SPAWN       = 11;   // [x, y, code, ID]
+    static final int LANDSCAPER_TASK        = 12;   // [x, y, code, ID, activity]
+    static final int DRONE_SPAWN            = 13;   // [x, y, code, ID]
+    static final int DRONE_TASK             = 14;   // [x, y, code, ID, activity]
+    static final int INIT_SOUP_LOCS         = 15;   // [1+x1+y1+x2+y2, 1+x3+y3+x4+y4, code, 1+x5+y5+x6+y6, ...] (up to 12 locs)
+    static final int INIT_WATER_LOCS        = 16;   // [1+x1+y1+x2+y2, 1+x3+y3+x4+y4, code, 1+x5+y5+x6+y6, ...] (up to 12 locs)
+    static final int INIT_REFINERY_LOCS     = 17;   // [1+x1+y1+x2+y2, 1+x3+y3+x4+y4, code, 1+x5+y5+x6+y6, ...] (up to 12 locs)
+    static final int SOUP_FOUND             = 18;   // [x, y, code]
+    static final int SOUP_GONE              = 19;   // [x, y, code]
+    static final int WATER_FOUND            = 20;   // [x, y, code]
+    static final int WATER_GONE             = 21;   // [x, y, code]
+    static final int REFINERY_DESTROYED     = 22;   // [x, y, code]
+    static final int ENEMY_HQ_FOUND         = 23;   // [x, y, code]
     
     /**
      * run() is the method that is called when a robot is instantiated in the Battlecode world.
@@ -128,6 +138,8 @@ public strictfp class RobotPlayer {
             hqLoc = rc.getLocation();
             // Try to broadcast it's location with 1 soup until it can
             tryBroadcastMessage(1, hqLoc.x, hqLoc.y, HQ_LOC, 0, 0, 0, 0);
+            // Compute desired miner locations
+            desiredMinerDests = bestMinerLocs(12);
             // Search surrounding square for soup and water
             int rad = (int) Math.sqrt(rc.getCurrentSensorRadiusSquared());
             for (int i=-rad; i<=rad; i++) {
@@ -137,7 +149,7 @@ public strictfp class RobotPlayer {
                         if (rc.senseSoup(loc) != 0)
                             soupLocs.add(loc);
                         else if (rc.senseFlooding(loc))
-                            waterLocs.add(loc)
+                            waterLocs.add(loc);
                     }
                 }
             }
@@ -153,12 +165,25 @@ public strictfp class RobotPlayer {
                     // Enemy HQ Found
                     if (enemyHQLoc == null && mess[2]%100 == ENEMY_HQ_FOUND)
                         enemyHQLoc = new MapLocation(-mess[0], -mess[1]);
+                    else if (mess[2]%100 == MINER_INIT_1) {
+                        MapLocation targetDest = desiredMinerDests[numMiners%12];
+                        tryBroadcastMessage(1, targetDest.x, targetDest.y, MINER_INIT_2, mess[3], 0, 0, 0);
+                    }
                     updateLocs(mess, 0);    // Update soup locations
                     updateLocs(mess, 1);    // Update water locations
                     updateLocs(mess, 2);    // Update refinery locations
                 }
             }
         }
+
+        // If there are enemies in range, build a design school/commission drones
+
+        // Otherwise, focus on building miners
+
+        // When miners are finished, complete the defensive ring
+
+        // After the defensive ring is finished, just build a design school and fulfillment center
+        // towards the middle and commission a bunch of landscapers/drones 
         
         // If there are a certain number of miners/refineries, build a miner
         if(numMiners <= 4 || (numMiners <= 10 && refineryLocs.size() >= 1)) {
@@ -166,19 +191,17 @@ public strictfp class RobotPlayer {
                 broadcastLocs(soupLocs, INIT_SOUP_LOCS);
                 broadcastLocs(refineryLocs, INIT_WATER_LOCS);
                 broadcastLocs(waterLocs, INIT_WATER_LOCS);
+
                 numMiners++;
             }
         }
-
-        // Commission miner movements (go to location or build) based on soupLocs and other stuff
-
-        // Commission buildings movements
     }
 
     static void runMiner() throws GameActionException {
 
         // Search surroundings for HQ upon spawn
         if (turnCount == 1) {
+            tryBroadcastMessage(1, 0, 0, MINER_INIT_1, rc.getID(), 0, 0, 0);
             RobotInfo[] robots = rc.senseNearbyRobots();
             for (RobotInfo robot : robots)
                 if (robot.getType() == RobotType.HQ)
@@ -194,25 +217,25 @@ public strictfp class RobotPlayer {
                 // Receive initial list of refinery/soup/water locations
                 if (mess[2]%100 == INIT_SOUP_LOCS || mess[2]%100 == INIT_WATER_LOCS || mess[2]%100 == INIT_REFINERY_LOCS) {
                     switch(mess[2]%100) {
-                        case INIT_SOUP_LOCS:    decodeLocsMessage(mess, soupLocs);      break;
-                        case INIT_WATER_LOCS:   decodeLocsMessage(mess, waterLocs);     break;
-                        case INIT_REINERY_LOCS: decodeLocsMessage(mess, reineryLocs);   break;
+                        case INIT_SOUP_LOCS:        decodeLocsMessage(mess, soupLocs);      break;
+                        case INIT_WATER_LOCS:       decodeLocsMessage(mess, waterLocs);     break;
+                        case INIT_REFINERY_LOCS:    decodeLocsMessage(mess, refineryLocs);  break;
                     }
                 }
-                updateLocs(mess, 0);    // Update soup locations
-                updateLocs(mess, 1);    // Update water locations
-                updateLocs(mess, 2);    // Update refinery locations
+                // Initialize default definition
+                if (mess[2]%100 == MINER_INIT_2 && mess[3]==rc.getID())
+                    defaultMinerDest = new MapLocation(-mess[0], -mess[1]);
                 // Move towards location if HQ requests
                 else if (mess[2]%100 == MINER_TASK && mess[3] == rc.getID()) {
                     robotDest = new MapLocation(-mess[0], -mess[1]);
                     if (mess[4] == -1)
                         robotMode = 1;
-                    else if (mess[4] == 0)
-                        robotMode = 0;
                     else
-                        robotNum = mess[4];
-                    waitMode = false;
+                        buildingNum = mess[4];
                 }
+                updateLocs(mess, 0);    // Update soup locations
+                updateLocs(mess, 1);    // Update water locations
+                updateLocs(mess, 2);    // Update refinery locations
             }
         }
 
@@ -222,7 +245,7 @@ public strictfp class RobotPlayer {
         // Explore mode
         if (robotMode == 0) {
             if (!exploreMove(robotDest))
-                tryBroadcastMessage(3, currLoc.x, currLoc.y, MINER_IDLE, rc.getID(), 0, 0, 0);
+                newMinerDest();
             // Change to mode 1 and update robotDest if soup is found
             if (checkForSoup()) {
                 robotMode = 1;
@@ -247,52 +270,46 @@ public strictfp class RobotPlayer {
                 destDir = currLoc.directionTo(robotDest);
                 // Change to mine if there's soup
                 if (rc.senseSoup(robotDest) != 0)
-                    robotMode = 1;
+                    robotMode = 2;
                 // Change to refine if there's a refinery
                 else if (rc.senseRobotAtLocation(robotDest).getType() == RobotType.REFINERY)
-                    robotMode = 2;
-                // Change to build if the destination is empty 
-                else if (robotNum != 0 && rc.canBuildRobot(spawnedByMiner[robotNum-1], destDir))
                     robotMode = 3;
-                // Otherwise, wait a turn
-                else
-                    minerCantBuild(currLoc);
+                // Change to build if given building by HQ
+                else if (buildingNum != 0)
+                    robotMode = 4;
+            }
+            // If miner senses that refinery isn't there, find a new refinery
+            if (findingRefinery && rc.canSenseLocation(robotDest)) {
+                RobotInfo robot = rc.senseRobotAtLocation(robotDest);
+                if (robot.getTeam() != rc.getTeam() || robot.getType() != RobotType.REFINERY) 
+                    newMinerDest();
             }
         }
         
-        // Mine soup mode (1)
+        // Mine soup mode (2)
         else if (robotMode == 2) {
-            if (!tryMine(destDir)) {
-                // If miner is full of soup, move back to the nearest refinery
-                robotMode = 0;
-                robotDest = hqLoc;
-                int lowestDist = currLoc.distanceSquaredTo(robotDest);
-                for (MapLocation loc : refineryLocs) {
-                    if (currLoc.distanceSquaredTo(loc) < lowestDist) {
-                        robotDest = loc;
-                        lowestDist = currLoc.distanceSquaredTo(loc);
-                    }
-                }
-            }
+            if (!tryMine(destDir)) 
+                newMinerDest();
         }
         
-        // Refine soup mode (2)
+        // Refine soup mode (3)
         else if (robotMode == 3) {
-            if (tryRefine(destDir)) {
-                tryBroadcastMessage(3, currLoc.x, currLoc.y, MINER_IDLE, rc.getID(), 0, 0, 0);
-                robotMode = -1;
-            }
+            // Try to refine the soup
+            tryRefine(destDir);
+            // New destination changes based on if the miner still has soup
+            newMinerDest();
         }
         
         // Build building mode (4)
         else if (robotMode == 4) {
-            if (tryBuild(spawnedByMiner[robotNum-1], destDir)) {
-                robotMode = -1;
-            else
-                minerCantBuild(currLoc);
+            // Give the miner a new destination if miner built something
+            if (tryBuildAround(spawnedByMiner[buildingNum-1], destDir)) {
+                newMinerDest();
+            }
+            // (Implicit) Otherwise, wait
         }
 
-        checkSoupWater();
+        checkSoupWaterRefineries();
     }
 
     static void runRefinery() throws GameActionException {
@@ -335,9 +352,8 @@ public strictfp class RobotPlayer {
         }
         
         // Try to make a landscaper if one is queued
-        if (unitsQueued > 0 && tryBuild(RobotType.LANDSCAPER, randomDirection())) {
+        if (unitsQueued > 0 && tryBuild(RobotType.LANDSCAPER, randomDirection()))
             unitsQueued--;
-        }
     }
 
     static void runFulfillmentCenter() throws GameActionException {
@@ -358,9 +374,8 @@ public strictfp class RobotPlayer {
         }
         
         // Try to make a drone if one is queued
-        if (unitsQueued > 0 && tryBuild(RobotType.LANDSCAPER, randomDirection())) {
+        if (unitsQueued > 0 && tryBuild(RobotType.LANDSCAPER, randomDirection()))
             unitsQueued--;
-        }
     }
         
     static void runNetGun() throws GameActionException {
@@ -513,19 +528,19 @@ public strictfp class RobotPlayer {
                         case INIT_WATER_LOCS:   decodeLocsMessage(mess, waterLocs); break;
                     }
                 }
-                updateLocs(mess, 0);    // Update soup locations
-                updateLocs(mess, 1);    // Update water locations
                 // Receive commands from HQ
                 else if (mess[2]%100 == DRONE_TASK && mess[3] == rc.getID())
                     robotMode = mess[4];
                 // Enemy HQ Found
                 if (enemyHQLoc == null && mess[2]%100 == ENEMY_HQ_FOUND)
                     enemyHQLoc = new MapLocation(-mess[0], -mess[1]);
+                updateLocs(mess, 0);    // Update soup locations
+                updateLocs(mess, 1);    // Update water locations
             }
         }
  
         checkForEnemyHQ();
-        checkSoupWater();
+        checkSoupWaterRefineries();
 
         // If holding something
         if (rc.isCurrentlyHoldingUnit()) {
@@ -542,8 +557,8 @@ public strictfp class RobotPlayer {
         }
 
         // If not holding anything, look for enemy units to attack
-        Team enemy = rc.getTeam().opponent();
         else {
+            Team enemy = rc.getTeam().opponent();
             // Pick up any enemy units/cows within striking range
             RobotInfo[] robots = rc.senseNearbyRobots(GameConstants.DELIVERY_DRONE_PICKUP_RADIUS_SQUARED, enemy);
             if (robots.length > 0) {
@@ -558,7 +573,8 @@ public strictfp class RobotPlayer {
                 // If an enemy unit is picked up
                 else {
                     // Path towards closest known water if any has been found
-                    if (!waterLocs.empty()) {
+                    if (!waterLocs.isEmpty()) {
+                        MapLocation currLoc = rc.getLocation();
                         robotDest = waterLocs.get(0);
                         int lowestDist = currLoc.distanceSquaredTo(robotDest);
                         for (int i=1; i<waterLocs.size(); i++) {
@@ -661,7 +677,7 @@ public strictfp class RobotPlayer {
      * Makes the optimal bug move towards a location
      * 
      * @param destination The intended destination
-     * @return false if arrived at destination
+     * @return false if adjacent to destination
      * @throws GameActionException
      */
     static boolean bugMove(MapLocation destination) throws GameActionException {
@@ -730,20 +746,17 @@ public strictfp class RobotPlayer {
     static boolean tryBuildAround(RobotType type, Direction dir) throws GameActionException {
         Direction[] toTry = {
             dir, 
-            dir.rotateLeft(),
             dir.rotateRight(),
-            dir.rotateLeft().rotateLeft(),
+            dir.rotateLeft(),
             dir.rotateRight().rotateRight(),
+            dir.rotateLeft().rotateLeft(),
             dir.opposite().rotateLeft(),
             dir.opposite().rotateRight(),
             dir.opposite()
         };
-        for (Direction d : toTry) {
-            if (rc.canBuildRobot(type, d)) {
-                rc.buildRobot(type, dir);
+        for (Direction d : toTry)
+            if (tryBuild(type, d))
                 return true;
-            }
-        }
         return false;
     }
 
@@ -1010,6 +1023,109 @@ public strictfp class RobotPlayer {
     }
 
     /**
+     * Finds the farthest corner to the robot
+     * 
+     * @return MapLocation of farthest corner
+     * @throws GameActionException
+     */
+    static MapLocation findFarthestCorner() throws GameActionException {
+        MapLocation currLoc = rc.getLocation();
+        int width = rc.getMapWidth();
+        int height = rc.getMapHeight();
+        int x = (currLoc.x >= width/2) ? 0 : width-1;
+        int y = (currLoc.y >= height/2) ? 0 : height-1;
+        return new MapLocation(x, y);
+    }
+
+    /**
+     * Sets the ArrayLists containing the defensive positions for the buildings and drones
+     * 
+     * @throws GameActionException
+     */
+    static void setDefensivePositions() throws GameActionException {
+
+        int mapHeight = rc.getMapHeight();
+        int mapWidth = rc.getMapWidth();
+        
+        // Find closest horizontal and vertical distance to an edge
+        int closestX = Math.min(hqLoc.x, (mapWidth-1)-hqLoc.x);
+        int closestY = Math.min(hqLoc.y, (mapHeight-1)-hqLoc.y);
+
+        int s;
+        // Top Left/Bottom Right Corner/Center
+        if ((closestX < mapWidth/3 && closestY < mapHeight/3) || (closestX >= mapWidth/3 && closestY >= mapHeight/3)) {
+            // Top or bottom switch
+            s = (hqLoc.y >= mapHeight/2) ? 1 : -1;
+            // Top Left/Bottom Right
+            if (hqLoc.x < mapWidth/2) {
+                defensiveVapLoc = new MapLocation(currLoc.translate(s*-3, s*3));
+                defensiveCenterLoc = new MapLocation(currLoc.translate(s*1, s*3);
+                defensiveSchoolLoc = new MapLocation(currLoc.translate(s*-3, s*-1));
+                defensiveGunLocs.add(currLoc.translate(s*3, s*1));
+                defensiveGunLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+            }
+            // Top Right/Bottom Left
+            else {
+                defensiveVapLoc = new MapLocation(currLoc.translate());
+                defensiveCenterLoc = new MapLocation(currLoc.translate());
+                defensiveSchoolLoc = new MapLocation(currLoc.translate());
+                defensiveGunLocs.add(currLoc.translate());
+                defensiveGunLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+            }
+        }
+
+        // Top Right/Bottom Left Corner/Center
+        else {
+            // Top/Bottom
+            if (closestY < mapHeight/3) {
+                s = ;
+                defensiveVapLoc = new MapLocation(currLoc.translate());
+                defensiveCenterLoc = new MapLocation(currLoc.translate());
+                defensiveSchoolLoc = new MapLocation(currLoc.translate());
+                defensiveGunLocs.add(currLoc.translate());
+                defensiveGunLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+            }
+            // Left/Right
+            else {
+                s = ;
+                defensiveVapLoc = new MapLocation(currLoc.translate());
+                defensiveCenterLoc = new MapLocation(currLoc.translate());
+                defensiveSchoolLoc = new MapLocation(currLoc.translate());
+                defensiveGunLocs.add(currLoc.translate());
+                defensiveGunLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+                defensiveDroneLocs.add(currLoc.translate());
+            }
+        }
+    }
+
+    /**
      * Initialize the locations for the second ring of miners around a location
      * 
      * @throws GameActionException
@@ -1027,17 +1143,48 @@ public strictfp class RobotPlayer {
     }
 
     /**
-     * The function to execute when a miner can't build in a direction
-     * If building/water, then broadcast that it needs a new destination and wait
-     * Otherwise, do nothing and wait
+     * Gives a miner a new destination once it finishes refining/building
+     * See comments for details on where this function sends the miners
+     *
      * 
      * @throws GameActionException
      */
-    static void minerCantBuild(MapLocation currLoc) throws GameActionException {
-        if ((rc.senseFlooding(robotDest) || rc.senseRobotAtLocation(robotDest).getType().isBuilding()) && !waitMode) {
-            broadcastMessage(3, currLoc.x, currLoc.y, MINER_IDLE, rc.getID(), 0, 0, 0);
-            waitMode = true;
+    static void newMinerDest() throws GameActionException {
+        MapLocation currLoc = rc.getLocation();
+        // If it's carrying soup, go to the nearest refinery
+        if (rc.getSoupCarrying() != 0) {
+            robotMode = 1;
+            robotDest = hqLoc;
+            int lowestDist = currLoc.distanceSquaredTo(robotDest);
+            for (MapLocation loc : refineryLocs) {
+                if (currLoc.distanceSquaredTo(loc) < lowestDist) {
+                    robotDest = loc;
+                    lowestDist = currLoc.distanceSquaredTo(loc);
+                }
+            }
         }
+        // Otherwise, if there's known soup, go to the location of the nearest soup
+        else if (soupLocs.size() != 0) {
+            robotMode = 1;
+            robotDest = soupLocs.get(0);
+            int minDist = currLoc.distanceSquaredTo(robotDest);
+            int tempDist;
+            for (int i=1; i<soupLocs.size(); i++) {
+                tempDist = currLoc.distanceSquaredTo(soupLocs.get(i));
+                if (tempDist < minDist) {
+                    minDist = tempDist;
+                    robotDest = soupLocs.get(i);
+                }
+            }
+        }
+        // Otherwise, if it wasn't already exploring, look to HQ for a destination to explore to
+        else if (robotMode != 0) {
+            robotMode = 0;
+            robotDest = defaultMinerDest;
+        }
+        // Finally, if it was already exploring and there's no known soup, just go to the farthest corner
+        else
+            robotDest = findFarthestCorner();
     }
 
     /**
@@ -1086,7 +1233,7 @@ public strictfp class RobotPlayer {
      * 
      * @throws GameActionException
      */
-    static void checkSoupWater() throws GameActionException {
+    static void checkSoupWaterRefineries() throws GameActionException {
         MapLocation currLoc = rc.getLocation();
         int rad = (int) Math.sqrt(rc.getCurrentSensorRadiusSquared());
         for (int i=-rad; i<=rad; i++) {
@@ -1111,7 +1258,15 @@ public strictfp class RobotPlayer {
                     // Disappeared water
                     else if (waterLocs.contains(loc) && !rc.senseFlooding(loc)) {
                         waterLocs.remove(loc);
-                        tryBroadcastMessage(1, loc.x, loc.y, WATER_GONE, 0, 0, 0, 0)
+                        tryBroadcastMessage(1, loc.x, loc.y, WATER_GONE, 0, 0, 0, 0);
+                    }
+                    // Destroyed refinery
+                    else if (refineryLocs.contains(loc)) {
+                        RobotInfo robot = rc.senseRobotAtLocation(loc);
+                        if (robot.getType() != RobotType.REFINERY || robot.getTeam() != rc.getTeam()) {
+                            refineryLocs.remove(loc);
+                            tryBroadcastMessage(1, loc.x, loc.y, REFINERY_DESTROYED, 0, 0, 0, 0);
+                        }
                     }
                 }
             }
@@ -1122,18 +1277,18 @@ public strictfp class RobotPlayer {
      * Update soup/water/refineryLocs based on blockchain message
      * code: 0 is soup, 1 is water, 2 is refinery
      * 
-     * @param message the blockchain message to parse
+     * @param mess the blockchain message to parse
      * @param code the specific resource/building to update
      * @throws GameActionException
      */
-    static void updateLocs(int[] message, int code) throws GameActionException {
+    static void updateLocs(int[] mess, int code) throws GameActionException {
         int createCode = 0;
-        int destroy = 0;
+        int destroyCode = 0;
         ArrayList<MapLocation> locs = new ArrayList<MapLocation>();
         switch (code) {
             case 0:
                 createCode = SOUP_FOUND;
-                destroycode = SOUP_GONE;
+                destroyCode = SOUP_GONE;
                 locs = soupLocs;
                 break;
             case 1:
@@ -1162,7 +1317,7 @@ public strictfp class RobotPlayer {
      * @return true if a message was broadcasted
      * @throws GameActionException
      */
-    static boolean broadcastMessage(int soupCost, int m0, int m1, int m2, int m3, int m4, int m5, 
+    static boolean broadcastMessage(int cost, int m0, int m1, int m2, int m3, int m4, int m5, 
         int m6) throws GameActionException {
         int[] message = new int[7];
         message[0] = -1 * m0; // -xLoc (negated for encryption)
@@ -1172,8 +1327,8 @@ public strictfp class RobotPlayer {
         message[4] = m4; // val2
         message[5] = m5; // val3
         message[6] = m6; // val4
-        if (rc.canSubmitTransaction(message, soupCost)) {
-            rc.submitTransaction(message, soupCost);
+        if (rc.getTeamSoup() >= cost){
+            rc.submitTransaction(message, cost);
             return true;
         }
         return false;
@@ -1194,10 +1349,10 @@ public strictfp class RobotPlayer {
      *
      * @throws GameActionException
      */
-    static void tryBroadcastMessage(int soupCost, int m0, int m1, int m2, int m3, int m4, int m5, int m6) throws GameActionException {
-        if (!broadcastMessage(soupCost, m0, m1, m2, m3, m4, m5, m6)) {
+    static void tryBroadcastMessage(int cost, int m0, int m1, int m2, int m3, int m4, int m5, int m6) throws GameActionException {
+        if (!broadcastMessage(cost, m0, m1, m2, m3, m4, m5, m6)) {
             int[] saveMess = new int[8];
-            saveMess[0] = soupCost;
+            saveMess[0] = cost;
             saveMess[1] = m0;
             saveMess[2] = m1;
             saveMess[3] = m2;
