@@ -30,6 +30,7 @@ public strictfp class RobotPlayer {
     static boolean leftTendency = false;
     static boolean findingRefinery = false;
     static boolean buildingMiner = false;
+    static boolean buildingCommissioned = false;
     static int turnCount;
     static int numMiners = 0;
     static int numDrones = 0;
@@ -49,11 +50,11 @@ public strictfp class RobotPlayer {
     static MapLocation lastBugPathLoc;
     static MapLocation[] desiredMinerDests;
     static PriorityQueue<int[]> messageQ                = new PriorityQueue<int[]>();
+    static ArrayList<Integer> designSchoolIDs           = new ArrayList<Integer>();
+    static ArrayList<Integer> fulfillmentCenterIDs      = new ArrayList<Integer>();
     static ArrayList<MapLocation> soupLocs              = new ArrayList<MapLocation>();
     static ArrayList<MapLocation> waterLocs             = new ArrayList<MapLocation>();
     static ArrayList<MapLocation> refineryLocs          = new ArrayList<MapLocation>();
-    static ArrayList<MapLocation> designSchoolLocs      = new ArrayList<MapLocation>();
-    static ArrayList<MapLocation> fulfillmentCenterLocs = new ArrayList<MapLocation>();
     static ArrayList<MapLocation> secondRowLocations    = new ArrayList<MapLocation>();
 
     // Defensive positions
@@ -178,8 +179,27 @@ public strictfp class RobotPlayer {
                     // Initialize drone
                     else if (mess[2]%100 == DRONE_SPAWN) {
                         numDrones++;
-                        tryBroadcastMessage(1, 0, 0, DRONE_INIT_2, mess[3], 0, 0, 0);
                         broadcastAll();
+                    }
+                    // Initialize vaporator
+                    else if (mess[2]%100 == VAPORATOR_CREATED) {
+                        numVaporators++;
+                        buildingCommissioned = false;
+                    }
+                    // Initialize design school
+                    else if (mess[2]%100 == DESIGN_SCHOOL_CREATED) {
+                        designSchoolIDs.add(mess[3]);
+                        buildingComissioned = false;
+                    }
+                    // Initialize fulfillment center
+                    else if (mess[2]%100 == FULFILLMENT_CREATED) {
+                        fulfillmentCenterIDs.add(mess[3]);
+                        buildingCommissioned = false;
+                    }
+                    // Initialize net gun
+                    else if (mess[2]%100 == NET_GUN_CREATED) {
+                        numNetGuns++;
+                        buildingCommissioned = false;
                     }
                     updateLocs(mess, 0);    // Update soup locations
                     updateLocs(mess, 1);    // Update water locations
@@ -189,7 +209,67 @@ public strictfp class RobotPlayer {
         }
 
         // If there are enemies in range, prioritize defense
-        // Build a miner (if none are near), then a design school, then drones
+        // Build 7 drones, then landscapers
+        // TODO: add "if (!buildingCommissioned) {} around everything below
+        RobotInfo[] robots = rc.senseNearbyRobots();
+        Team enemyTeam = rc.getTeam().opponent();
+        // Check if there is an enemy nearby
+        boolean enemyNear = false;
+        for (RobotInfo robot : robots) {
+            if (robot.getTeam() == enemyTeam) {
+                enemyNear = true;
+                break;
+            }
+        }
+        if (enemyNear) {
+            
+            //  if (numDrones < 7)
+            //      if (fulfillment center exists)  commission drone
+            //      find nearest miner
+            //      else if (nearest miner exists)  commission fulfillment center
+            //      else if (have 70 soup)  try to make a miner
+            //  else if (numLandscapers < 16)
+            //      if (design school exists)   commission landscaper
+            //      find nearest miner
+            //      else if (nearest miner exists)  commission design school
+            //      else if (have 70 soup)  try to make miner
+            //
+            // 
+            //
+            //
+            //
+            //
+            //
+            //
+            //
+            //
+            // If we already have a fulfillment center, commission a drone
+            if (!fulfillmentCenterIDs.isEmpty() && numDrones < 7) {
+                tryBroadcastMessage(2, 0, 0, FULFILLMENT_TASK, fulfillmentCenterIDs.get(0), 0, 0, 0);
+                buildingCommissioned = true;
+            }
+            // Attempt to find closest friendly miner to fulfillment center
+            int minerID = -1;
+            int lsd = 46;
+            int sd;
+            for (RobotInfo robot : robots) {
+                if (robot.getType() == RobotType.MINER && robot.getTeam() == rc.getTeam()) {
+                    sd = robot.getLocation.distanceSquaredTo(defensiveFulfillmentLoc);
+                    if (sd < lsd) {
+                        minerID = robot.getID();
+                        lsd = sd;
+                    }
+                }
+            }
+            // Otherwise, try to build a fulfillment center if there's a nearby miner
+            else if (fulfillmentCenterIDs.isEmpty() && minerID != -1) {
+                tryBroadcastMessage(2, defensiveCenterLoc.x, defensiveCenterLoc.y, MINER_TASK, minerID, spawnedByMiner[4], 1, 0);
+                buildingCommissioned = true;
+            }
+            else if (rc.getTeamSoup() >= 70) {
+                tryBuildAround(RobotType.MINER, optimalDirection());
+            }
+        }
         
         // Otherwise, focus on building miners
         else if (numMiners < 11) {
@@ -454,8 +534,10 @@ public strictfp class RobotPlayer {
             int[] mess = tx.getMessage();
             if (mess[2]/100 == TEAM_SECRET) {
                 // Receive commands from HQ
-                if (mess[3]%100 == LANDSCAPER_TASK)
+                if (mess[2]%100 == LANDSCAPER_TASK) {
+                    robotDest = new MapLocation(-mess[0], -mess[1]);
                     robotMode = mess[4];
+                }
                 // Enemy HQ Found
                 if (enemyHQLoc == null && mess[2]%100 == ENEMY_HQ_FOUND)
                     enemyHQLoc = new MapLocation(-mess[0], -mess[1]);
@@ -573,6 +655,7 @@ public strictfp class RobotPlayer {
                     enemyHQLoc = new MapLocation(-mess[0], -mess[1]);
                 updateLocs(mess, 0);    // Update soup locations
                 updateLocs(mess, 1);    // Update water locations
+                updateLocs(mess, 2);    // Update refinery locations
             }
         }
  
