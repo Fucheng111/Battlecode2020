@@ -31,6 +31,7 @@ public strictfp class RobotPlayer {
     static boolean findingRefinery = false;
     static boolean buildingMiner = false;
     static boolean buildingCommissioned = false;
+    static boolean isHQDefender = false;
     static int turnCount;
     static int numMiners = 0;
     static int numDrones = 0;
@@ -39,8 +40,8 @@ public strictfp class RobotPlayer {
     static int numNetGuns = 0;
     static int unitsQueued = 0;
     static int robotMode = -1;          // Default mode of -1 is the "do nothing" mode
-    static int buildingNum;
-    static int buildingImportant;
+    static int buildingNum = 0;
+    static int buildingImportance = 0;
     static int[] minerDestOrder;
     static Direction destDir;
     static MapLocation hqLoc;
@@ -414,12 +415,13 @@ public strictfp class RobotPlayer {
         
         // Build building mode (4)
         // In importance 0, try to build all around miner
-        // In improtance 1, build at a specific location
+        // In importance 1, build at a specific location
+        // Give the miner a new destination if miner built something
         else if (robotMode == 4) {
-            // Give the miner a new destination if miner built something
-            if (tryBuildAround(spawnedByMiner[buildingNum-1], destDir)) {
+            if (buildingImportance == 1 && tryBuild(spawnedByMiner[buildingNum-1], destDir)) 
                 newMinerDest();
-            }
+            else if (buildingImportance == 0 && tryBuildAround(spawnedByMiner[buildingNum-1], destDir))
+                newMinerDest();
             // (Implicit) Otherwise, wait
         }
 
