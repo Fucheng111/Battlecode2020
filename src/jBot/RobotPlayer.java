@@ -844,20 +844,15 @@ public strictfp class RobotPlayer {
 
         // Attack mode assuming landscapers are spawning next to/near the enemy HQ (1)
         else if (robotMode == 1) {
-<<<<<<< Upstream, based on branch 'master' of https://github.com/Fucheng111/Battlecode2020.git
 
-            checkForEnemyHQ();
-=======
             checkForEnemyHQ(); 
-            // TODO: add something else for the landscaper to do
             
-            MapLocation currLoc = rc.getLocation();
+            currLoc = rc.getLocation();
             
             if(!rc.canMove(currLoc.directionTo(robotDest))) {
             	
             }
-            
->>>>>>> 065db40 minor change to attack mode landscapers
+
             // Move to designated position
             else if (!currLoc.equals(robotDest))
                 bugMoveJ(robotDest);
