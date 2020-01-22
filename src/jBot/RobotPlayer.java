@@ -1,4 +1,5 @@
 package jBot;
+
 import battlecode.common.*;
 import java.lang.Math;
 import java.util.Arrays;
@@ -50,11 +51,12 @@ public strictfp class RobotPlayer {
     static int robotMode = 0;
     static int buildingNum = 0;
     static int buildingImportance = 0;
-    static int builderMinerID = -1;
     static int landscapersCommissioned = 0;
     static int dronesCommissioned = 0;
     static int cowCooldown = 0;
     static int bugDirectionTendency = 0;    // 0 for none, 1 for left, 2 for right
+    static int builderMinerID = -1;
+    static int builderMinerCount = 0;       // Increment after building something
     static int[] minerDestOrder;
     static Direction destDir;
     static MapLocation hqLoc;
@@ -62,12 +64,11 @@ public strictfp class RobotPlayer {
     static MapLocation robotDest;
     static MapLocation defaultUnitDest;
     static MapLocation lastBugPathLoc;
-    static MapLocation[] desiredMinerDests;
+    static MapLocation[] defaultMinerDests;
     static Queue<int[]> messageQ                    = new LinkedList<int[]>();
     static List<Integer> minerIDs                   = new ArrayList<Integer>();
     static List<Integer> designSchoolIDs            = new ArrayList<Integer>();
     static List<Integer> fulfillmentCenterIDs       = new ArrayList<Integer>();
-    static List<MapLocation> secondRowLocations     = new ArrayList<MapLocation>();
     static Set<MapLocation> soupLocs                = new HashSet<MapLocation>();
     static Set<MapLocation> waterLocs               = new HashSet<MapLocation>();
     static Set<MapLocation> refineryLocs            = new HashSet<MapLocation>();
@@ -76,8 +77,9 @@ public strictfp class RobotPlayer {
     static MapLocation defensiveVapLoc;
     static MapLocation defensiveCenterLoc;
     static MapLocation defensiveSchoolLoc;
-    static List<MapLocation> defensiveGunLocs       = new ArrayList<MapLocation>();
-    static List<MapLocation> defensiveDroneLocs     = new ArrayList<MapLocation>();
+    static MapLocation[] defensiveGunLocs;
+    static MapLocation[] defensiveDroneLocs;
+    static MapLocation[] defensiveScaperLocs;
     
     // Communication codes
     static final int TEAM_SECRET = 789;
@@ -143,12 +145,12 @@ public strictfp class RobotPlayer {
     static void runHQ() throws GameActionException {
 
         // At the beginning of the game...
-        if(turnCount == 1) {
+        if (turnCount == 1) {
             // Set it's own location as hqLoc and try to broadcast hqLoc until it can
             hqLoc = rc.getLocation();
             tryBroadcastMessage(1, hqLoc.x, hqLoc.y, HQ_LOC, 0, 0, 0, 0);
             // Compute desired miner locations
-            desiredMinerDests = bestMinerLocs(11);
+            initiateMinerDests(11);
             minerDestOrder = new int[]{5, 0, 10, 8, 2, 4, 6, 9, 1, 3, 7};
             // Search surrounding square for soup and water
             int rad = (int) Math.sqrt(rc.getCurrentSensorRadiusSquared());
@@ -181,7 +183,7 @@ public strictfp class RobotPlayer {
                     // Initialize miner
                     else if (mess[2]%100 == MINER_INIT_1) {
                         minerIDs.add(mess[3]);
-                        MapLocation targetDest = desiredMinerDests[minerDestOrder[numMiners%11]];
+                        MapLocation targetDest = defaultMinerDests[minerDestOrder[numMiners%11]];
                         int mode = 0;
                         // Builder miner
                         if (builderMiner) {
@@ -197,38 +199,35 @@ public strictfp class RobotPlayer {
                         numDrones++;
                         dronesCommissioned--;
                         broadcastAll();
-                        MapLocation defaultLoc = defensiveDroneLocs.get(numDrones%7);
+                        MapLocation defaultLoc = defensiveDroneLocs[numDrones%7];
                         tryBroadcastMessage(1, defaultLoc.x, defaultLoc.y, DRONE_TASK, mess[3], 0, 0, 0);
                     }
                     // Initialize landscaper
                     else if (mess[2]%100 == LANDSCAPER_SPAWN) {
                         numLandscapers++;
                         dronesCommissioned--;
+                        MapLocation defaultLoc = defensiveScaperLocs[numLandscapers%16];
+                        tryBroadcastMessage(1, defaultLoc.x, defaultLoc.y, LANDSCAPER_TASK, mess[3], 0, 0, 0);
                     }
                     // Initialize vaporator
                     else if (mess[2]%100 == VAPORATOR_CREATED) {
                         numVaporators++;
                         buildingCommissioned = false;
-                        defensiveVapLoc = null;
                     }
                     // Initialize design school
                     else if (mess[2]%100 == DESIGN_SCHOOL_CREATED) {
                         designSchoolIDs.add(mess[3]);
                         buildingCommissioned = false;
-                        defensiveSchoolLoc = null;
                     }
                     // Initialize fulfillment center
                     else if (mess[2]%100 == FULFILLMENT_CREATED) {
                         fulfillmentCenterIDs.add(mess[3]);
                         buildingCommissioned = false;
-                        defensiveCenterLoc = null;
                     }
                     // Initialize net gun
                     else if (mess[2]%100 == NET_GUN_CREATED) {
                         numNetGuns++;
                         buildingCommissioned = false;
-                        if (!defensiveGunLocs.isEmpty())
-                            defensiveGunLocs.remove(0);
                     }
                     updateLocs(mess, 0);    // Update soup locations
                     updateLocs(mess, 1);    // Update water locations
@@ -309,7 +308,7 @@ public strictfp class RobotPlayer {
                     builderMiner = true;
             }
             // Design School (1)
-            else if (defensiveSchoolLoc != null) {
+            else if (designSchoolIDs.isEmpty()) {
                 System.out.println("Check 4..." + builderMinerID);
                 if (builderMinerID != -1) {
                     tryBroadcastMessage(1, 0, 0, MINER_TASK, builderMinerID, 3, 1, 0);
@@ -324,7 +323,7 @@ public strictfp class RobotPlayer {
                 landscapersCommissioned += newLandscapers;
             }
             // Fulfillment Center (1)
-            else if (defensiveCenterLoc != null) {
+            else if (fulfillmentCenterIDs.isEmpty()) {
                 System.out.println("Check 6");
                 tryBroadcastMessage(1, 0, 0, MINER_TASK, builderMinerID, 4, 1, 0);
                 buildingCommissioned = true;
@@ -337,13 +336,13 @@ public strictfp class RobotPlayer {
                 dronesCommissioned += newDrones;
             }
             // Net Guns (2)
-            else if (!defensiveGunLocs.isEmpty()) {
+            else if (numNetGuns < 2) {
                 System.out.println("Check 8");
                 tryBroadcastMessage(1, 0, 0, MINER_TASK, builderMinerID, 5, 1, 0);
                 buildingCommissioned = true;
             }
             // Vaporator (1)
-            else if (defensiveVapLoc != null) {
+            else if (numVaporators == 0) {
                 System.out.println("Check 9");
                 tryBroadcastMessage(1, 0, 0, MINER_TASK, builderMinerID, 2, 1, 0);
                 buildingCommissioned = true;
@@ -430,8 +429,6 @@ public strictfp class RobotPlayer {
                         defaultUnitDest = new MapLocation(-mess[0], -mess[1]);
                         robotMode = mess[4];
                         numMiners += mess[5];
-                        if (robotMode == 5)
-                            builderMiner = true;
                     }
                 }
                 else if (mess[2]%100 == MINER_INIT_1) {
@@ -458,6 +455,7 @@ public strictfp class RobotPlayer {
             }
         }
 
+        checkSoupWater();
         checkForEnemyHQ();
         MapLocation currLoc = rc.getLocation();
 
@@ -515,7 +513,7 @@ public strictfp class RobotPlayer {
             // Check if next to soup
             else if (findingSoup) {
                 MapLocation[] nearbySoups = rc.senseNearbySoup(2);
-                if (nearbySoups != null) {
+                if (nearbySoups != null && nearbySoups.length != 0) {
                     robotMode = 2;
                     findingSoup = false;
                 }
@@ -543,7 +541,7 @@ public strictfp class RobotPlayer {
                 }
             }
             else
-                bugMove(robotDest);
+                bugMoveJ(robotDest);
         }
         
         // Mine soup mode (2)
@@ -599,80 +597,77 @@ public strictfp class RobotPlayer {
             }
 
             // Build design school when commissioned
-            if (defensiveSchoolLoc != null) {
+            if (builderMinerCount == 0) {
                 System.out.println("check 2");
                 if (buildingNum == 3) {
                     if (currLoc.isAdjacentTo(defensiveSchoolLoc)) {
                         if (tryBuild(RobotType.DESIGN_SCHOOL, currLoc.directionTo(defensiveSchoolLoc)))
-                            defensiveSchoolLoc = null;
+                            builderMinerCount++;
                     }
                     else
-                        bugMove(defensiveSchoolLoc);
+                        bugMoveJ(defensiveSchoolLoc);
                 }
                 else {
                     MapLocation waitLoc = defensiveSchoolLoc.subtract(currLoc.directionTo(hqLoc));
                     if (!waitLoc.equals(currLoc))
-                        bugMove(waitLoc);
+                        bugMoveJ(waitLoc);
                 }
             }
 
             // Build fulfillment center when commissioned
-            else if (defensiveCenterLoc != null) {
+            else if (builderMinerCount == 1) {
                 System.out.println("check 3");
                 if (buildingNum == 4) {
-                    if (currLoc.isAdjacentTo(defensiveCenterLoc))
+                    if (currLoc.isAdjacentTo(defensiveCenterLoc)) {
                         if (tryBuild(RobotType.FULFILLMENT_CENTER, currLoc.directionTo(defensiveCenterLoc)))
-                            defensiveCenterLoc = null;
+                            builderMinerCount++;
+                    }
                     else
-                        bugMove(defensiveCenterLoc);
+                        bugMoveJ(defensiveCenterLoc);
                 }
                 else {
                     MapLocation waitLoc = defensiveCenterLoc.subtract(currLoc.directionTo(hqLoc));
                     if (!waitLoc.equals(currLoc))
-                        bugMove(waitLoc);
+                        bugMoveJ(waitLoc);
                 }
             }
 
             // Build net guns when commissioned
-            else if (!defensiveGunLocs.isEmpty()) {
+            else if (builderMinerCount <= 3) {
                 System.out.println("check 4");
                 if (buildingNum == 5) {
-                    if (currLoc.isAdjacentTo(defensiveGunLocs.get(0)))
-                        if (tryBuild(RobotType.NET_GUN, currLoc.directionTo(defensiveGunLocs.get(0))))
-                            defensiveGunLocs.remove(0);
+                    if (currLoc.isAdjacentTo(defensiveGunLocs[builderMinerCount-2])) {
+                        if (tryBuild(RobotType.NET_GUN, currLoc.directionTo(defensiveGunLocs[builderMinerCount-2])))
+                            builderMinerCount++;
+                    }
                     else
-                        bugMove(defensiveGunLocs.get(0));
+                        bugMoveJ(defensiveGunLocs[builderMinerCount-2]);
                 }
                 else {
-                    MapLocation waitLoc = defensiveGunLocs.get(0).subtract(currLoc.directionTo(hqLoc));
+                    MapLocation waitLoc = defensiveGunLocs[builderMinerCount-2].subtract(currLoc.directionTo(hqLoc));
                     if (!waitLoc.equals(currLoc))
-                        bugMove(waitLoc);
+                        bugMoveJ(waitLoc);
                 }
             }
 
             // Build vaporator when commissioned
-            else if (defensiveVapLoc != null) {
+            else if (builderMinerCount == 4) {
                 System.out.println("check 5");
                 if (buildingNum == 2) {
-                    if (currLoc.isAdjacentTo(defensiveVapLoc))
-                        if (tryBuild(RobotType.VAPORATOR, currLoc.directionTo(defensiveVapLoc))) {
+                    if (currLoc.isAdjacentTo(defensiveVapLoc)) {
+                        if (tryBuild(RobotType.VAPORATOR, currLoc.directionTo(defensiveVapLoc)))
                             robotMode = 0;
-                            defensiveVapLoc = null;
-                        }
+                    }
                     else
-                        bugMove(defensiveVapLoc);
+                        bugMoveJ(defensiveVapLoc);
                 }
                 else {
                     MapLocation waitLoc = defensiveVapLoc.subtract(currLoc.directionTo(hqLoc));
                     if (!waitLoc.equals(currLoc))
-                        bugMove(waitLoc);
+                        bugMoveJ(waitLoc);
                 }
             }   
         }
-
-        System.out.println("ree1");
-        checkSoupWater();
-        System.out.println("ree2");
     }
 
     static void runRefinery() throws GameActionException {
@@ -788,83 +783,55 @@ public strictfp class RobotPlayer {
             int[] mess = tx.getMessage();
             if (mess[2]/100 == TEAM_SECRET) {
                 // Receive commands from HQ
-                if (mess[2]%100 == LANDSCAPER_TASK) {
+                if (mess[2]%100 == LANDSCAPER_TASK && mess[3] == rc.getID()) {
                     robotDest = new MapLocation(-mess[0], -mess[1]);
                     robotMode = mess[4];
                 }
                 // Enemy HQ Found
-                if (enemyHQLoc == null && mess[2]%100 == ENEMY_HQ_FOUND)
+                else if (enemyHQLoc == null && mess[2]%100 == ENEMY_HQ_FOUND)
                     enemyHQLoc = new MapLocation(-mess[0], -mess[1]);
             }
         }
 
-        checkForEnemyHQ();
+        // Only start running until it gets a robotDest
+        if (robotDest == null)
+            return;
 
         // Two-layer defense mode (0)
         if (robotMode == 0) {
-            initializeSecondRowLocations();
             MapLocation currLoc = rc.getLocation();
-
-            // Move if not in position
-            if (!nearHQ) {
-                bugMoveJ(hqLoc);
-                currLoc = rc.getLocation();
-                // If adjacent to HQ, stop moving, start digging
-                if (currLoc.isAdjacentTo(hqLoc))
-                    nearHQ = true;
-                // If in second row position and first row is in place, also start digging
-                else if (currLoc.isWithinDistanceSquared(hqLoc, 5)) {
-                    boolean bothScapers = true;
-                    // Don't dig if the 2 spots are occupied by other robots
-                    // TODO: Next 3 lines are unnecessary
-                    RobotInfo[] nearbyRobots = rc.senseNearbyRobots(2, rc.getTeam());
-                    for (RobotInfo robot : nearbyRobots)
-                        if (robot.getLocation().isAdjacentTo(hqLoc) && robot.getType() != RobotType.LANDSCAPER)
-                            bothScapers = false;
-                    // Also don't dig if the 2 spots are empty
-                    for (int i=-1; i<=1; i++) {
-                        for (int j=-1; j<=1; j++) {
-                            MapLocation nearLoc = currLoc.translate(i, j);
-                            if (nearLoc.isAdjacentTo(hqLoc)) {
-                                if (!rc.isLocationOccupied(nearLoc) || 
-                                    rc.senseRobotAtLocation(nearLoc).getType() != RobotType.LANDSCAPER)
-                                    bothScapers = false;
-                            }
-                        }
-                    }
-                    if (bothScapers)
-                        nearHQ = true;
-                }
-            }
-
+            // Move to designated position
+            if (!currLoc.equals(robotDest))
+                bugMoveJ(robotDest);
             // Trump Inc.
             else {
+                // Establish direction to dump dirt when arriving at destination
+                if (destDir == null) {
+                    // If next to HQ, dump dirt on itself
+                    if (currLoc.isAdjacentTo(hqLoc))
+                        destDir = Direction.CENTER;
+                    // Otherwise, rotate left if not one of (1, -2), (2, 1), (-1, 2), (-2, -1)
+                    else {
+                        destDir = currLoc.directionTo(hqLoc);
+                        int dx = currLoc.x - hqLoc.x;
+                        int dy = currLoc.y - hqLoc.y;
+                        // Check if (dx, dy) is one of (-1, -2), (-2, 1), (1, 2), (2, -1)
+                        if ((dx == -1 && dy == -2) || (dx == -2 && dy == 1) || (dx == 1 && dy == 2) || (dx == 2 && dy == -1))
+                            destDir = destDir.rotateLeft();
+                    }
+                }
+                // Dig dirt if not carrying any dirt
                 if (rc.getDirtCarrying() == 0)
                     tryDig(currLoc.directionTo(hqLoc).opposite());
-                else {
-                    // If adj, dump dirt on itself
-                    if (currLoc.isAdjacentTo(hqLoc))
-                        rc.depositDirt(Direction.CENTER);
-                    // Otherwise, alternate between which landscaper deposits directly next
-                    // to itself or diagonally next to itself.
-                    else {
-                        Direction depositDir = null;
-                        for (int i = 0; i < secondRowLocations.size(); i++) {
-                            if (currLoc.equals(secondRowLocations.get(i))) {
-                                if (i % 2 == 0)
-                                    depositDir = currLoc.directionTo(hqLoc);
-                                else
-                                    depositDir = currLoc.directionTo(hqLoc).rotateLeft();
-                            }
-                        }
-                        if (depositDir != null && rc.canDepositDirt(depositDir)) 
-                            rc.depositDirt(depositDir);
-                    }       
-                }
+                // Otherwise dump dirt
+                else if (rc.canDepositDirt(destDir))
+                    rc.depositDirt(destDir);
             }
         }
 
+        // Attack mode? (1)
         else if (robotMode == 1) {
+            checkForEnemyHQ();
             // TODO: add something else for the landscaper to do
         } 
     }
@@ -1009,7 +976,7 @@ public strictfp class RobotPlayer {
                 if (robots.length > 0) {
                     for (RobotInfo robot : robots) {
                         if (robot.getType() != RobotType.COW || cowCooldown == 0) {
-                            bugMove(robot.getLocation());
+                            exploreMove(robot.getLocation());
                             movedTowardsEnemy = true;
                             break;
                         }
@@ -1032,7 +999,7 @@ public strictfp class RobotPlayer {
                             robotDest = enemyHQLoc;
                     }
                     if (currLoc != robotDest)
-                        bugMove(robotDest);
+                        exploreMove(robotDest);
                 }
             }
         }  
@@ -1140,37 +1107,37 @@ public strictfp class RobotPlayer {
     static void bugMoveJ(MapLocation destination) throws GameActionException {
         Direction dir = rc.getLocation().directionTo(destination);
         // If able to move directly towards destination, do so and reset tendency
-        if (tryMove(dir)) {
+        if (tryMoveNew(dir)) {
             bugDirectionTendency = 0;
             return;
         }
         // If no tendency, find tendency
         if (bugDirectionTendency == 0) {
-            if (tryMove(dir.rotateLeft())) {
+            if (tryMoveNew(dir.rotateLeft())) {
                 bugDirectionTendency = 1;
                 return;
             }
-            if (tryMove(dir.rotateRight())) {
+            if (tryMoveNew(dir.rotateRight())) {
                 bugDirectionTendency = 2;
                 return;
             }
-            if (tryMove(dir.rotateLeft().rotateLeft())) {
+            if (tryMoveNew(dir.rotateLeft().rotateLeft())) {
                 bugDirectionTendency = 1;
                 return;
             }
-            if (tryMove(dir.rotateRight().rotateRight())) {
+            if (tryMoveNew(dir.rotateRight().rotateRight())) {
                 bugDirectionTendency = 2;
                 return;
             }
-            if (tryMove(dir.opposite().rotateRight())) {
+            if (tryMoveNew(dir.opposite().rotateRight())) {
                 bugDirectionTendency = 1;
                 return;
             }
-            if (tryMove(dir.opposite().rotateLeft())) {
+            if (tryMoveNew(dir.opposite().rotateLeft())) {
                 bugDirectionTendency = 2;
                 return;
             }
-            if (tryMove(dir.opposite())) {
+            if (tryMoveNew(dir.opposite())) {
                 bugDirectionTendency = 1;
                 return;
             }
@@ -1187,7 +1154,7 @@ public strictfp class RobotPlayer {
                 dir.rotateRight()
             };
             for (Direction d : toTry)
-                if (tryMove(d))
+                if (tryMoveNew(d))
                     return;
         }
         // Right tendency
@@ -1202,7 +1169,7 @@ public strictfp class RobotPlayer {
                 dir.rotateLeft()
             };
             for (Direction d : toTry)
-                if (tryMove(d))
+                if (tryMoveNew(d))
                     return;
         }
     }
@@ -1217,6 +1184,23 @@ public strictfp class RobotPlayer {
     static boolean tryMove(Direction dir) throws GameActionException {
         if (rc.canMove(dir) && !rc.senseFlooding(rc.getLocation().add(dir))) {
             rc.move(dir);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Attempts to move in a given direction, but only if it doens't return to the previous location.
+     *
+     * @param dir The intended direction of movement
+     * @return true if a move was performed
+     * @throws GameActionException
+     */
+    static boolean tryMoveNew(Direction dir) throws GameActionException {
+        MapLocation nextLoc = rc.getLocation().add(dir);
+        if (rc.canMove(dir) && !rc.senseFlooding(nextLoc) && !nextLoc.equals(lastBugPathLoc)) {
+            rc.move(dir);
+            lastBugPathLoc = nextLoc;
             return true;
         }
         return false;
@@ -1351,186 +1335,6 @@ public strictfp class RobotPlayer {
     }
 
     /**
-     * Find the best locations to send a certain number of miners to explore the map
-     * 
-     * @param numMiners the number of miners we have
-     * @return an array of MapLocations to send the miners towards
-     * @throws GameActionException
-     */
-    static MapLocation[] bestMinerLocs(int numMiners) throws GameActionException {
-
-        int mapHeight = rc.getMapHeight();
-        int mapWidth = rc.getMapWidth();
-        
-        // Find closest horizontal and vertical distance to an edge
-        int closestX = Math.min(hqLoc.x, (mapWidth-1)-hqLoc.x);
-        int closestY = Math.min(hqLoc.y, (mapHeight-1)-hqLoc.y);
-
-        // Determine the widest 2 locations based on whether we are at a corner, edge, or center
-        // destinations[0] will be on the "right", destinations[1] will be on the "right"
-        MapLocation[] destinations = new MapLocation[numMiners];
-        // Corner case - parallel with edges
-        if (closestX < mapWidth/3 && closestY < mapHeight/3) {
-            // Bottom left
-            if (hqLoc.x < mapWidth/2 && hqLoc.y < mapHeight/2) {
-                destinations[0] = new MapLocation(mapWidth-1, hqLoc.y);                
-                destinations[1] = new MapLocation(hqLoc.x, mapHeight-1);
-            }
-            // Top left
-            else if (hqLoc.x < mapWidth/2 && hqLoc.y >= mapHeight/2) {
-                destinations[0] = new MapLocation(hqLoc.x, 0);
-                destinations[1] = new MapLocation(mapWidth-1, hqLoc.y);
-            }
-            // Bottom right
-            else if (hqLoc.x >= mapWidth/2 && hqLoc.y < mapHeight/2) {
-                destinations[0] = new MapLocation(hqLoc.x, mapHeight-1);
-                destinations[1] = new MapLocation(0, hqLoc.y);
-            }
-            // Top right
-            else if (hqLoc.x >= mapWidth/2 && hqLoc.y >= mapHeight/2) {
-                destinations[0] = new MapLocation(0, hqLoc.y);
-                destinations[1] = new MapLocation(hqLoc.x, 0);
-            }
-        }
-        // Center case - towards a point 5 (sensor radius) units away from the middle 2 distant corners
-        else if (closestX >= mapWidth/3 && closestY >= mapHeight/3) {
-            // Bottom left
-            if (hqLoc.x < mapWidth/2 && hqLoc.y < mapHeight/2) {
-                destinations[0] = new MapLocation(mapWidth-1, 5);
-                destinations[1] = new MapLocation(5, mapHeight-1);
-            }
-            // Top left
-            else if (hqLoc.x < mapWidth/2 && hqLoc.y >= mapHeight/2) {
-                destinations[0] = new MapLocation(5, 0);
-                destinations[1] = new MapLocation(mapWidth-1, mapHeight-6);
-            }
-            // Bottom right
-            else if (hqLoc.x >= mapWidth/2 && hqLoc.y < mapHeight/2) {
-                destinations[0] = new MapLocation(mapWidth-6, mapHeight-1);
-                destinations[1] = new MapLocation(0, 5);
-            }
-            // Top right
-            else if (hqLoc.x >= mapWidth/2 && hqLoc.y >= mapHeight/2) {
-                destinations[0] = new MapLocation(0, mapHeight-6);
-                destinations[1] = new MapLocation(mapWidth-6, 0);
-            }
-        }
-        // Edge case (actual map edge not an "edge" case)
-        else {
-            // Special case for three miners
-            // Find offset from middle and shift coordinates proportionally
-            if (numMiners <= 3) {
-                // Left or right
-                int offset = 0;
-                if (closestX < mapWidth/3)
-                    offset = (hqLoc.y - mapHeight / 2) * mapWidth / mapHeight;
-                // Bottom or top
-                else
-                    offset = (hqLoc.x - mapWidth / 2) * mapHeight / mapWidth;
-                // Left edge
-                if (hqLoc.x < mapWidth/3) {
-                    destinations[0] = new MapLocation(mapWidth/2-offset, 0);
-                    destinations[1] = new MapLocation(mapWidth/2+offset, mapHeight-1);
-                }
-                // Right edge
-                else if (mapWidth-hqLoc.x-1 < mapWidth/3) {
-                    destinations[0] = new MapLocation(mapWidth/2-offset, mapHeight-1);
-                    destinations[1] = new MapLocation(mapWidth/2+offset, 0);
-                }
-                // Bottom edge
-                else if (hqLoc.y < mapHeight/3) {
-                    destinations[0] = new MapLocation(mapWidth-1, mapHeight/2+offset);
-                    destinations[1] = new MapLocation(0, mapHeight/2-offset);
-                }
-                // Top edge
-                else if (mapHeight-hqLoc.y-1 < mapHeight/3) {
-                    destinations[0] = new MapLocation(0, mapHeight/2+offset);
-                    destinations[1] = new MapLocation(mapWidth-1, mapHeight/2-offset);
-                }
-            }
-            // Parallel with edge
-            else {
-                // Left edge
-                if (hqLoc.x < mapWidth/3) {
-                    destinations[0] = new MapLocation(hqLoc.x, 0);
-                    destinations[1] = new MapLocation(hqLoc.x, mapHeight-1);
-                }
-                // Right edge
-                else if (mapWidth-hqLoc.x-1 < mapWidth/3) {
-                    destinations[0] = new MapLocation(hqLoc.x, mapHeight-1);
-                    destinations[1] = new MapLocation(hqLoc.x, 0);
-                }
-                // Bottom edge
-                else if (hqLoc.y < mapHeight/3) {
-                    destinations[0] = new MapLocation(mapWidth-1, hqLoc.y);
-                    destinations[1] = new MapLocation(0, hqLoc.y);
-                }
-                // Top edge
-                else if (mapHeight-hqLoc.y-1 < mapHeight/3) {
-                    destinations[0] = new MapLocation(0, hqLoc.y);
-                    destinations[1] = new MapLocation(mapWidth-1, hqLoc.y);
-                }
-            }
-        }
-
-        // Find the other numMiners-2 locations between the two widest locations
-        // Vectors between the 2 widest points and hq
-        int v1x = destinations[0].x - hqLoc.x;
-        int v1y = destinations[0].y - hqLoc.y;
-        int v2x = destinations[1].x - hqLoc.x;
-        int v2y = destinations[1].y - hqLoc.y;
-        // Dot product angle formula to find widest angle
-        double totalAngle = Math.acos((v1x*v2x+v1y*v2y)/Math.sqrt((v1x*v1x+v1y*v1y)*(v2x*v2x+v2y*v2y)));
-        // Iterate through each miner in the middle
-        double partialAngle = totalAngle/(numMiners-1);
-        // Vector found by rotating v1 by rotationAngle radians
-        double v3x, v3y;
-        // Points found by following v3 from hq until an edge
-        double px, py;
-        // Shortest time to horizontal and vertical edge and any edge
-        double tH = 0;
-        double tV = 0;
-        for (int i=1; i<=numMiners-2; i++) {
-            double rotationAngle = partialAngle*i;
-            v3x = Math.cos(rotationAngle)*v1x - Math.sin(rotationAngle)*v1y;
-            v3y = Math.sin(rotationAngle)*v1x + Math.cos(rotationAngle)*v1y;
-            // Find "time" to each side from following v3 from hq until an edge
-            // Find tH
-            if (v3x > 0)
-                tH = (mapWidth-hqLoc.x-1)/v3x;
-            else if (v3x < 0)
-                tH = -hqLoc.x/v3x;
-            // Find tV
-            if (v3y > 0)
-                tV = (mapHeight-hqLoc.y-1)/v3y;
-            else if (v3y < 0)
-                tV = -hqLoc.y/v3y;
-            // Compute px and py
-            if (v3y == 0 || tH < tV) {
-                py = hqLoc.y + tH * v3y;
-                // Left edge
-                if (v3x < 0)
-                    px = 0;
-                // Right edge
-                else
-                    px = mapWidth-1;
-            }
-            else {
-                px = hqLoc.x + tV * v3x;
-                // Bottom edge
-                if (v3y < 0)
-                    py = 0;
-                // Top edge
-                else
-                    py = mapHeight-1;
-            }
-            destinations[i+1] = new MapLocation((int) Math.round(px), (int) Math.round(py));
-        }
-
-        return destinations;
-    }
-
-    /**
      * Finds the closest "corner" to the robot
      * 
      * @return MapLocation 3x3 away from closest corner
@@ -1609,6 +1413,29 @@ public strictfp class RobotPlayer {
      */
     static void setDefensivePositions() throws GameActionException {
 
+        // Initialize arrays
+        defensiveGunLocs = new MapLocation[2];
+        defensiveDroneLocs = new MapLocation[7];
+        defensiveScaperLocs = new MapLocation[16];
+
+        // First do the landscapers
+        // First layer
+        int count = 0;
+        for (Direction d : directions)
+            defensiveScaperLocs[count++] = hqLoc.add(d);
+        // Second layer
+        // Sadly it's more efficient to hardcode this (I think)
+        defensiveScaperLocs[8]  = hqLoc.translate(-2,-1);
+        defensiveScaperLocs[9]  = hqLoc.translate(-2, 1);
+        defensiveScaperLocs[10] = hqLoc.translate(-1,-2);
+        defensiveScaperLocs[11] = hqLoc.translate(-1, 2);
+        defensiveScaperLocs[12] = hqLoc.translate(1 ,-2);
+        defensiveScaperLocs[13] = hqLoc.translate(1 , 2);
+        defensiveScaperLocs[14] = hqLoc.translate(2 ,-1);
+        defensiveScaperLocs[15] = hqLoc.translate(2 , 1);
+
+        // Now do everything else...
+
         int mapHeight = rc.getMapHeight();
         int mapWidth = rc.getMapWidth();
         
@@ -1626,30 +1453,30 @@ public strictfp class RobotPlayer {
                 defensiveVapLoc = hqLoc.translate(s*-3, s*3);
                 defensiveCenterLoc = hqLoc.translate(s*1, s*3);
                 defensiveSchoolLoc = hqLoc.translate(s*-3, s*-1);
-                defensiveGunLocs.add(hqLoc.translate(s*3, s*1));
-                defensiveGunLocs.add(hqLoc.translate(s*-1, s*-3));
-                defensiveDroneLocs.add(hqLoc.translate(s*3, s*3));
-                defensiveDroneLocs.add(hqLoc.translate(s*3, 0));
-                defensiveDroneLocs.add(hqLoc.translate(s*3, s*-1));
-                defensiveDroneLocs.add(hqLoc.translate(s*3, s*-3));
-                defensiveDroneLocs.add(hqLoc.translate(s*1, s*-3));
-                defensiveDroneLocs.add(hqLoc.translate(0, s*-3));
-                defensiveDroneLocs.add(hqLoc.translate(s*-3, s*-3));
+                defensiveGunLocs[0] = hqLoc.translate(s*3, s*1);
+                defensiveGunLocs[1] = hqLoc.translate(s*-1, s*-3);
+                defensiveDroneLocs[0] = hqLoc.translate(s*3, s*3);
+                defensiveDroneLocs[1] = hqLoc.translate(s*3, 0);
+                defensiveDroneLocs[2] = hqLoc.translate(s*3, s*-1);
+                defensiveDroneLocs[3] = hqLoc.translate(s*3, s*-3);
+                defensiveDroneLocs[4] = hqLoc.translate(s*1, s*-3);
+                defensiveDroneLocs[5] = hqLoc.translate(0, s*-3);
+                defensiveDroneLocs[6] = hqLoc.translate(s*-3, s*-3);
             }
             // Top Right/Bottom Left
             else {
                 defensiveVapLoc = hqLoc.translate(s*3, s*3);
                 defensiveCenterLoc = hqLoc.translate(s*3, s*-1);
                 defensiveSchoolLoc = hqLoc.translate(s*-1, s*3);
-                defensiveGunLocs.add(hqLoc.translate(s*1, s*-3));
-                defensiveGunLocs.add(hqLoc.translate(s*-3, s*1));
-                defensiveDroneLocs.add(hqLoc.translate(s*3, s*-3));
-                defensiveDroneLocs.add(hqLoc.translate(0, s*-3));
-                defensiveDroneLocs.add(hqLoc.translate(s*-1, s*-3));
-                defensiveDroneLocs.add(hqLoc.translate(s*-3, s*-3));
-                defensiveDroneLocs.add(hqLoc.translate(s*-3, s*-1));
-                defensiveDroneLocs.add(hqLoc.translate(s*-3, 0));
-                defensiveDroneLocs.add(hqLoc.translate(s*-3, s*3));
+                defensiveGunLocs[0] = hqLoc.translate(s*1, s*-3);
+                defensiveGunLocs[1] = hqLoc.translate(s*-3, s*1);
+                defensiveDroneLocs[0] = hqLoc.translate(s*3, s*-3);
+                defensiveDroneLocs[1] = hqLoc.translate(0, s*-3);
+                defensiveDroneLocs[2] = hqLoc.translate(s*-1, s*-3);
+                defensiveDroneLocs[3] = hqLoc.translate(s*-3, s*-3);
+                defensiveDroneLocs[4] = hqLoc.translate(s*-3, s*-1);
+                defensiveDroneLocs[5] = hqLoc.translate(s*-3, 0);
+                defensiveDroneLocs[6] = hqLoc.translate(s*-3, s*3);
             }
         }
 
@@ -1661,15 +1488,15 @@ public strictfp class RobotPlayer {
                 defensiveVapLoc = hqLoc.translate(0, s*3);
                 defensiveCenterLoc = hqLoc.translate(s*-3, 0);
                 defensiveSchoolLoc = hqLoc.translate(s*3, 0);
-                defensiveGunLocs.add(hqLoc.translate(s*3, s*-3));
-                defensiveGunLocs.add(hqLoc.translate(s*-3, s*-3));
-                defensiveDroneLocs.add(hqLoc.translate(s*3, s*1));
-                defensiveDroneLocs.add(hqLoc.translate(s*3, s*-1));
-                defensiveDroneLocs.add(hqLoc.translate(s*1, s*-3));
-                defensiveDroneLocs.add(hqLoc.translate(0, s*-3));
-                defensiveDroneLocs.add(hqLoc.translate(s*-1, s*-3));
-                defensiveDroneLocs.add(hqLoc.translate(s*-3, s*-1));
-                defensiveDroneLocs.add(hqLoc.translate(s*-3, s*1));
+                defensiveGunLocs[0] = hqLoc.translate(s*3, s*-3);
+                defensiveGunLocs[1] = hqLoc.translate(s*-3, s*-3);
+                defensiveDroneLocs[0] = hqLoc.translate(s*3, s*1);
+                defensiveDroneLocs[1] = hqLoc.translate(s*3, s*-1);
+                defensiveDroneLocs[2] = hqLoc.translate(s*1, s*-3);
+                defensiveDroneLocs[3] = hqLoc.translate(0, s*-3);
+                defensiveDroneLocs[4] = hqLoc.translate(s*-1, s*-3);
+                defensiveDroneLocs[5] = hqLoc.translate(s*-3, s*-1);
+                defensiveDroneLocs[6] = hqLoc.translate(s*-3, s*1);
             }
             // Left/Right
             else {
@@ -1677,33 +1504,195 @@ public strictfp class RobotPlayer {
                 defensiveVapLoc = hqLoc.translate(s*3, 0);
                 defensiveCenterLoc = hqLoc.translate(0, s*3);
                 defensiveSchoolLoc = hqLoc.translate(0, s*-3);
-                defensiveGunLocs.add(hqLoc.translate(s*-3, s*-3));
-                defensiveGunLocs.add(hqLoc.translate(s*-3, s*3));
-                defensiveDroneLocs.add(hqLoc.translate(s*1, s*-3));
-                defensiveDroneLocs.add(hqLoc.translate(s*-1, s*-3));
-                defensiveDroneLocs.add(hqLoc.translate(s*-3, s*-1));
-                defensiveDroneLocs.add(hqLoc.translate(s*-3, 0));
-                defensiveDroneLocs.add(hqLoc.translate(s*-3, s*1));
-                defensiveDroneLocs.add(hqLoc.translate(s*-1, s*3));
-                defensiveDroneLocs.add(hqLoc.translate(s*1, s*3));
+                defensiveGunLocs[0] = hqLoc.translate(s*-3, s*-3);
+                defensiveGunLocs[1] = hqLoc.translate(s*-3, s*3);
+                defensiveDroneLocs[0] = hqLoc.translate(s*1, s*-3);
+                defensiveDroneLocs[1] = hqLoc.translate(s*-1, s*-3);
+                defensiveDroneLocs[2] = hqLoc.translate(s*-3, s*-1);
+                defensiveDroneLocs[3] = hqLoc.translate(s*-3, 0);
+                defensiveDroneLocs[4] = hqLoc.translate(s*-3, s*1);
+                defensiveDroneLocs[5] = hqLoc.translate(s*-1, s*3);
+                defensiveDroneLocs[6] = hqLoc.translate(s*1, s*3);
             }
         }
     }
 
     /**
-     * Initialize the locations for the second ring of miners around a location
+     * Find the best locations to send a certain number of miners to explore the map
      * 
+     * @param numMiners the number of miners we have
+     * @return an array of MapLocations to send the miners towards
      * @throws GameActionException
      */
-    static void initializeSecondRowLocations() throws GameActionException {
-        int rad = 2;
-        MapLocation myLoc = rc.getLocation();
-        for (int i = -rad; i < rad; i++) {
-            for (int j = -rad; j < rad; j++) {
-                MapLocation loc = myLoc.translate(i, j);
-                if (myLoc.distanceSquaredTo(loc) == 5)
-                    secondRowLocations.add(loc);
+    static void initiateMinerDests(int numMiners) throws GameActionException {
+
+        defaultMinerDests = new MapLocation[numMiners];
+
+        int mapHeight = rc.getMapHeight();
+        int mapWidth = rc.getMapWidth();
+        
+        // Find closest horizontal and vertical distance to an edge
+        int closestX = Math.min(hqLoc.x, (mapWidth-1)-hqLoc.x);
+        int closestY = Math.min(hqLoc.y, (mapHeight-1)-hqLoc.y);
+
+        // Determine the widest 2 locations based on whether we are at a corner, edge, or center
+        // defaultMinerDests[0] will be on the "right", defaultMinerDests[1] will be on the "right"
+        // Corner case - parallel with edges
+        if (closestX < mapWidth/3 && closestY < mapHeight/3) {
+            // Bottom left
+            if (hqLoc.x < mapWidth/2 && hqLoc.y < mapHeight/2) {
+                defaultMinerDests[0] = new MapLocation(mapWidth-1, hqLoc.y);                
+                defaultMinerDests[1] = new MapLocation(hqLoc.x, mapHeight-1);
             }
+            // Top left
+            else if (hqLoc.x < mapWidth/2 && hqLoc.y >= mapHeight/2) {
+                defaultMinerDests[0] = new MapLocation(hqLoc.x, 0);
+                defaultMinerDests[1] = new MapLocation(mapWidth-1, hqLoc.y);
+            }
+            // Bottom right
+            else if (hqLoc.x >= mapWidth/2 && hqLoc.y < mapHeight/2) {
+                defaultMinerDests[0] = new MapLocation(hqLoc.x, mapHeight-1);
+                defaultMinerDests[1] = new MapLocation(0, hqLoc.y);
+            }
+            // Top right
+            else if (hqLoc.x >= mapWidth/2 && hqLoc.y >= mapHeight/2) {
+                defaultMinerDests[0] = new MapLocation(0, hqLoc.y);
+                defaultMinerDests[1] = new MapLocation(hqLoc.x, 0);
+            }
+        }
+        // Center case - towards a point 5 (sensor radius) units away from the middle 2 distant corners
+        else if (closestX >= mapWidth/3 && closestY >= mapHeight/3) {
+            // Bottom left
+            if (hqLoc.x < mapWidth/2 && hqLoc.y < mapHeight/2) {
+                defaultMinerDests[0] = new MapLocation(mapWidth-1, 5);
+                defaultMinerDests[1] = new MapLocation(5, mapHeight-1);
+            }
+            // Top left
+            else if (hqLoc.x < mapWidth/2 && hqLoc.y >= mapHeight/2) {
+                defaultMinerDests[0] = new MapLocation(5, 0);
+                defaultMinerDests[1] = new MapLocation(mapWidth-1, mapHeight-6);
+            }
+            // Bottom right
+            else if (hqLoc.x >= mapWidth/2 && hqLoc.y < mapHeight/2) {
+                defaultMinerDests[0] = new MapLocation(mapWidth-6, mapHeight-1);
+                defaultMinerDests[1] = new MapLocation(0, 5);
+            }
+            // Top right
+            else if (hqLoc.x >= mapWidth/2 && hqLoc.y >= mapHeight/2) {
+                defaultMinerDests[0] = new MapLocation(0, mapHeight-6);
+                defaultMinerDests[1] = new MapLocation(mapWidth-6, 0);
+            }
+        }
+        // Edge case (actual map edge not an "edge" case)
+        else {
+            // Special case for three miners
+            // Find offset from middle and shift coordinates proportionally
+            if (numMiners <= 3) {
+                // Left or right
+                int offset = 0;
+                if (closestX < mapWidth/3)
+                    offset = (hqLoc.y - mapHeight / 2) * mapWidth / mapHeight;
+                // Bottom or top
+                else
+                    offset = (hqLoc.x - mapWidth / 2) * mapHeight / mapWidth;
+                // Left edge
+                if (hqLoc.x < mapWidth/3) {
+                    defaultMinerDests[0] = new MapLocation(mapWidth/2-offset, 0);
+                    defaultMinerDests[1] = new MapLocation(mapWidth/2+offset, mapHeight-1);
+                }
+                // Right edge
+                else if (mapWidth-hqLoc.x-1 < mapWidth/3) {
+                    defaultMinerDests[0] = new MapLocation(mapWidth/2-offset, mapHeight-1);
+                    defaultMinerDests[1] = new MapLocation(mapWidth/2+offset, 0);
+                }
+                // Bottom edge
+                else if (hqLoc.y < mapHeight/3) {
+                    defaultMinerDests[0] = new MapLocation(mapWidth-1, mapHeight/2+offset);
+                    defaultMinerDests[1] = new MapLocation(0, mapHeight/2-offset);
+                }
+                // Top edge
+                else if (mapHeight-hqLoc.y-1 < mapHeight/3) {
+                    defaultMinerDests[0] = new MapLocation(0, mapHeight/2+offset);
+                    defaultMinerDests[1] = new MapLocation(mapWidth-1, mapHeight/2-offset);
+                }
+            }
+            // Parallel with edge
+            else {
+                // Left edge
+                if (hqLoc.x < mapWidth/3) {
+                    defaultMinerDests[0] = new MapLocation(hqLoc.x, 0);
+                    defaultMinerDests[1] = new MapLocation(hqLoc.x, mapHeight-1);
+                }
+                // Right edge
+                else if (mapWidth-hqLoc.x-1 < mapWidth/3) {
+                    defaultMinerDests[0] = new MapLocation(hqLoc.x, mapHeight-1);
+                    defaultMinerDests[1] = new MapLocation(hqLoc.x, 0);
+                }
+                // Bottom edge
+                else if (hqLoc.y < mapHeight/3) {
+                    defaultMinerDests[0] = new MapLocation(mapWidth-1, hqLoc.y);
+                    defaultMinerDests[1] = new MapLocation(0, hqLoc.y);
+                }
+                // Top edge
+                else if (mapHeight-hqLoc.y-1 < mapHeight/3) {
+                    defaultMinerDests[0] = new MapLocation(0, hqLoc.y);
+                    defaultMinerDests[1] = new MapLocation(mapWidth-1, hqLoc.y);
+                }
+            }
+        }
+
+        // Find the other numMiners-2 locations between the two widest locations
+        // Vectors between the 2 widest points and hq
+        int v1x = defaultMinerDests[0].x - hqLoc.x;
+        int v1y = defaultMinerDests[0].y - hqLoc.y;
+        int v2x = defaultMinerDests[1].x - hqLoc.x;
+        int v2y = defaultMinerDests[1].y - hqLoc.y;
+        // Dot product angle formula to find widest angle
+        double totalAngle = Math.acos((v1x*v2x+v1y*v2y)/Math.sqrt((v1x*v1x+v1y*v1y)*(v2x*v2x+v2y*v2y)));
+        // Iterate through each miner in the middle
+        double partialAngle = totalAngle/(numMiners-1);
+        // Vector found by rotating v1 by rotationAngle radians
+        double v3x, v3y;
+        // Points found by following v3 from hq until an edge
+        double px, py;
+        // Shortest time to horizontal and vertical edge and any edge
+        double tH = 0;
+        double tV = 0;
+        for (int i=1; i<=numMiners-2; i++) {
+            double rotationAngle = partialAngle*i;
+            v3x = Math.cos(rotationAngle)*v1x - Math.sin(rotationAngle)*v1y;
+            v3y = Math.sin(rotationAngle)*v1x + Math.cos(rotationAngle)*v1y;
+            // Find "time" to each side from following v3 from hq until an edge
+            // Find tH
+            if (v3x > 0)
+                tH = (mapWidth-hqLoc.x-1)/v3x;
+            else if (v3x < 0)
+                tH = -hqLoc.x/v3x;
+            // Find tV
+            if (v3y > 0)
+                tV = (mapHeight-hqLoc.y-1)/v3y;
+            else if (v3y < 0)
+                tV = -hqLoc.y/v3y;
+            // Compute px and py
+            if (v3y == 0 || tH < tV) {
+                py = hqLoc.y + tH * v3y;
+                // Left edge
+                if (v3x < 0)
+                    px = 0;
+                // Right edge
+                else
+                    px = mapWidth-1;
+            }
+            else {
+                px = hqLoc.x + tV * v3x;
+                // Bottom edge
+                if (v3y < 0)
+                    py = 0;
+                // Top edge
+                else
+                    py = mapHeight-1;
+            }
+            defaultMinerDests[i+1] = new MapLocation((int) Math.round(px), (int) Math.round(py));
         }
     }
 
