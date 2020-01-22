@@ -872,9 +872,17 @@ public strictfp class RobotPlayer {
 
         // Attack mode assuming landscapers are spawning next to/near the enemy HQ (1)
         else if (robotMode == 1) {
-            checkForEnemyHQ();
+
+            checkForEnemyHQ(); 
+            
+            currLoc = rc.getLocation();
+            
+            if(!rc.canMove(currLoc.directionTo(robotDest))) {
+            	
+            }
+
             // Move to designated position
-            if (!currLoc.equals(robotDest))
+            else if (!currLoc.equals(robotDest))
                 bugMoveJ(robotDest);
             // Trump Inc.
             else {
@@ -883,6 +891,7 @@ public strictfp class RobotPlayer {
                     // If next to HQ, dump dirt on itself
                     if (currLoc.isAdjacentTo(enemyHQLoc))
                         destDir = currLoc.directionTo(enemyHQLoc);
+
 
                 }
                 // Dig dirt if not carrying any dirt
