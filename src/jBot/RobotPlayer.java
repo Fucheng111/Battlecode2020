@@ -844,6 +844,7 @@ public strictfp class RobotPlayer {
 
         // Attack mode assuming landscapers are spawning next to/near the enemy HQ (1)
         else if (robotMode == 1) {
+
             checkForEnemyHQ();
             // Move to designated position
             if (!currLoc.equals(robotDest))
@@ -855,6 +856,7 @@ public strictfp class RobotPlayer {
                     // If next to HQ, dump dirt on itself
                     if (currLoc.isAdjacentTo(enemyHQLoc))
                         destDir = currLoc.directionTo(enemyHQLoc);
+
 
                 }
                 // Dig dirt if not carrying any dirt
