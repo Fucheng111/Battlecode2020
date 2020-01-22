@@ -41,6 +41,7 @@ public strictfp class RobotPlayer {
     static boolean builderMinerInit = false;
     static boolean isCow = false;
     static boolean expectWater = false;
+    static boolean landscaperStart = false;
     static int turnCount;
     static int numMiners = 0;
     static int numDrones = 0;
@@ -96,18 +97,19 @@ public strictfp class RobotPlayer {
     static final int MINER_TASK             = 10;   // [x, y, code, ID, buildingID/-1 for soup/0 for wander, importance]
     static final int LANDSCAPER_SPAWN       = 11;   // [x, y, code, ID]
     static final int LANDSCAPER_TASK        = 12;   // [x, y, code, ID, activity]
-    static final int DRONE_SPAWN            = 13;   // [x, y, code, ID]
-    static final int DRONE_TASK             = 14;   // [x, y, code, ID, activity]
-    static final int INIT_SOUP_LOCS         = 15;   // [1+x1+y1+x2+y2, 1+x3+y3+x4+y4, code, 1+x5+y5+x6+y6, ...] (up to 12 locs)
-    static final int INIT_WATER_LOCS        = 16;   // [1+x1+y1+x2+y2, 1+x3+y3+x4+y4, code, 1+x5+y5+x6+y6, ...] (up to 12 locs)
-    static final int INIT_REFINERY_LOCS     = 17;   // [1+x1+y1+x2+y2, 1+x3+y3+x4+y4, code, 1+x5+y5+x6+y6, ...] (up to 12 locs)
-    static final int SOUP_FOUND             = 18;   // [x, y, code]
-    static final int SOUP_GONE              = 19;   // [x, y, code]
-    static final int WATER_FOUND            = 20;   // [x, y, code]
-    static final int WATER_GONE             = 21;   // [x, y, code]
-    static final int REFINERY_DESTROYED     = 22;   // [x, y, code]
-    static final int ENEMY_HQ_FOUND         = 23;   // [x, y, code]
-    static final int STARTED_TURTLE         = 24;   // [x, y, code]
+    static final int LANDSCAPER_START       = 13;   // [x, y, code, ID] 
+    static final int DRONE_SPAWN            = 14;   // [x, y, code, ID]
+    static final int DRONE_TASK             = 15;   // [x, y, code, ID, activity]
+    static final int INIT_SOUP_LOCS         = 16;   // [1+x1+y1+x2+y2, 1+x3+y3+x4+y4, code, 1+x5+y5+x6+y6, ...] (up to 12 locs)
+    static final int INIT_WATER_LOCS        = 17;   // [1+x1+y1+x2+y2, 1+x3+y3+x4+y4, code, 1+x5+y5+x6+y6, ...] (up to 12 locs)
+    static final int INIT_REFINERY_LOCS     = 18;   // [1+x1+y1+x2+y2, 1+x3+y3+x4+y4, code, 1+x5+y5+x6+y6, ...] (up to 12 locs)
+    static final int SOUP_FOUND             = 19;   // [x, y, code]
+    static final int SOUP_GONE              = 20;   // [x, y, code]
+    static final int WATER_FOUND            = 21;   // [x, y, code]
+    static final int WATER_GONE             = 22;   // [x, y, code]
+    static final int REFINERY_DESTROYED     = 23;   // [x, y, code]
+    static final int ENEMY_HQ_FOUND         = 24;   // [x, y, code]
+    static final int STARTED_TURTLE         = 25;   // [x, y, code]
     
     /**
      * run() is the method that is called when a robot is instantiated in the Battlecode world.
@@ -167,7 +169,7 @@ public strictfp class RobotPlayer {
             }
             refineryLocs.add(hqLoc);
             // Initialize defensive locations
-            setDefensivePositions();   
+            setDefensivePositions();
         }
 
         tryBroadcastQueue();
@@ -204,9 +206,9 @@ public strictfp class RobotPlayer {
                     }
                     // Initialize landscaper
                     else if (mess[2]%100 == LANDSCAPER_SPAWN) {
-                        numLandscapers++;
                         dronesCommissioned--;
                         MapLocation defaultLoc = defensiveScaperLocs[numLandscapers%16];
+                        numLandscapers++;
                         tryBroadcastMessage(1, defaultLoc.x, defaultLoc.y, LANDSCAPER_TASK, mess[3], 0, 0, 0);
                     }
                     // Initialize vaporator
@@ -234,6 +236,12 @@ public strictfp class RobotPlayer {
                     updateLocs(mess, 2);    // Update refinery locations
                 }
             }
+        }
+
+        // If the first ring of landscapers are in place, start building
+        if (!landscaperStart && rc.senseNearbyRobots(2, rc.getTeam()).length == 8) {
+            tryBroadcastMessage(3, 0, 0, LANDSCAPER_START, 0, 0, 0, 0);
+            landscaperStart = true;
         }
 
         // Only commission something if a building/unit isn't being commissioned
@@ -395,6 +403,7 @@ public strictfp class RobotPlayer {
         System.out.println("Turn count: " + turnCount);
         System.out.println("Robot mode: " + robotMode);
         System.out.println("Soup carrying: " + rc.getSoupCarrying());
+        System.out.println("Num refineries: " + refineryLocs.size());
         
         // Search surroundings for HQ upon spawn
         if (turnCount == 1) {
@@ -712,7 +721,7 @@ public strictfp class RobotPlayer {
         }
         
         // Try to make a landscaper if one is queued
-        Direction dir = rc.getLocation().directionTo(hqLoc);
+        Direction dir = rc.getLocation().directionTo(hqLoc).opposite();
         if (unitsQueued > 0 && tryBuildAround(RobotType.LANDSCAPER, dir))
             unitsQueued--;
     }
@@ -786,7 +795,10 @@ public strictfp class RobotPlayer {
                 if (mess[2]%100 == LANDSCAPER_TASK && mess[3] == rc.getID()) {
                     robotDest = new MapLocation(-mess[0], -mess[1]);
                     robotMode = mess[4];
+                    System.out.println("Yo shit my dest is: " + robotDest);
                 }
+                else if (mess[2]%100 == LANDSCAPER_START)
+                    landscaperStart = true;
                 // Enemy HQ Found
                 else if (enemyHQLoc == null && mess[2]%100 == ENEMY_HQ_FOUND)
                     enemyHQLoc = new MapLocation(-mess[0], -mess[1]);
@@ -797,14 +809,15 @@ public strictfp class RobotPlayer {
         if (robotDest == null)
             return;
 
+        MapLocation currLoc = rc.getLocation();
+
         // Two-layer defense mode (0)
         if (robotMode == 0) {
-            MapLocation currLoc = rc.getLocation();
             // Move to designated position
             if (!currLoc.equals(robotDest))
                 bugMoveJ(robotDest);
             // Trump Inc.
-            else {
+            else if (landscaperStart) {
                 // Establish direction to dump dirt when arriving at destination
                 if (destDir == null) {
                     // If next to HQ, dump dirt on itself
@@ -829,10 +842,28 @@ public strictfp class RobotPlayer {
             }
         }
 
-        // Attack mode? (1)
+        // Attack mode assuming landscapers are spawning next to/near the enemy HQ (1)
         else if (robotMode == 1) {
             checkForEnemyHQ();
-            // TODO: add something else for the landscaper to do
+            // Move to designated position
+            if (!currLoc.equals(robotDest))
+                bugMoveJ(robotDest);
+            // Trump Inc.
+            else {
+                // Establish direction to dump dirt when arriving at destination
+                if (destDir == null) {
+                    // If next to HQ, dump dirt on itself
+                    if (currLoc.isAdjacentTo(enemyHQLoc))
+                        destDir = currLoc.directionTo(enemyHQLoc);
+
+                }
+                // Dig dirt if not carrying any dirt
+                if (rc.getDirtCarrying() == 0)
+                    tryDig(currLoc.directionTo(enemyHQLoc).opposite());
+                // Otherwise dump dirt
+                else if (rc.canDepositDirt(destDir))
+                    rc.depositDirt(destDir);
+            }
         } 
     }
 
