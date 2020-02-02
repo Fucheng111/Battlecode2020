@@ -1,6 +1,6 @@
-# Battlecode 2020 Scaffold
+# Battlecode 2020
 
-This is the Battlecode 2020 scaffold, containing an `examplefuncsplayer`. Read https://2020.battlecode.org/getting-started!
+This is Big Buds code for Battlecode 2020.
 
 ### Project Structure
 
